@@ -74,7 +74,7 @@ body {
 .hud-metrics {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -86,18 +86,22 @@ body {
 }
 
 .hud-label {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
 }
 
 .hud-value {
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+.hud-value--sector {
+  color: var(--accent-cyan);
 }
 
 .hud-value--timer {
@@ -132,9 +136,9 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(30, 41, 59, 0.92);
   color: var(--text-primary);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 600;
-  padding: 6px 9px;
+  padding: 5px 8px;
   border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
@@ -316,12 +320,12 @@ body {
 
 @media (max-width: 420px) {
   .hud-top-bar {
-    padding: 6px 8px;
+    padding: 5px 6px;
     gap: 4px;
   }
 
   .hud-metrics {
-    gap: 7px;
+    gap: 6px;
   }
 
   .hud-metric--status {
@@ -329,16 +333,16 @@ body {
   }
 
   .hud-value {
-    font-size: 0.78rem;
+    font-size: 0.74rem;
   }
 
   .hud-btn {
-    padding: 5px 7px;
-    font-size: 0.72rem;
+    padding: 4px 6px;
+    font-size: 0.68rem;
   }
 
   .hud-help-banner {
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     padding: 6px 10px;
   }
 }

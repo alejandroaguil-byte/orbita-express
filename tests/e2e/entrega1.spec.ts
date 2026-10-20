@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test.describe('Órbita Express - Verificación Integral de Navegador (Entregas 1, 2 y 3)', () => {
-  test('flujo completo: inicio, controles táctiles/teclado, cancelar gesto, pausa, fin de partida, récord persistente y 360px', async ({
+test.describe('Órbita Express - Verificación Integral de Navegador y Progresión de Sectores', () => {
+  test('flujo completo: inicio, sector 1/3, controles táctiles/teclado, cancelar gesto, pausa, fin de partida y 360px', async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
@@ -18,9 +18,10 @@ test.describe('Órbita Express - Verificación Integral de Navegador (Entregas 1
 
     await page.goto('/');
 
-    // 1. Verificar pantalla de Inicio visible y ayuda inicial obligatoria
+    // 1. Verificar pantalla de Inicio visible, sector inicial y ayuda obligatoria
     const startModal = page.locator('#start-modal');
     await expect(startModal).toBeVisible();
+    await expect(page.locator('#hud-sector')).toHaveText('1 / 3');
     await expect(page.locator('#hud-help-banner')).toHaveText(
       'Mantené presionado para ver la dirección. Soltá para saltar.',
     );
@@ -87,7 +88,6 @@ test.describe('Órbita Express - Verificación Integral de Navegador (Entregas 1
     );
     expect(remainingStillPaused).toBeCloseTo(remainingAtPause, 5);
 
-    // El botón Continuar recibe foco al pausar y puede accionarse con Enter
     await page.keyboard.press('Enter');
     await expect(page.locator('#pause-modal')).toBeHidden();
 
@@ -115,6 +115,7 @@ test.describe('Órbita Express - Verificación Integral de Navegador (Entregas 1
       window.__ORBITA_DEBUG__?.getSnapshot(),
     );
     expect(snapshotAfterRestart?.jumpCount).toBe(0);
+    expect(snapshotAfterRestart?.currentSectorNumber).toBe(1);
     expect(snapshotAfterRestart?.ship.currentPlanetId).toBe('p-base');
 
     await page.keyboard.down('Space');
@@ -140,6 +141,7 @@ test.describe('Órbita Express - Verificación Integral de Navegador (Entregas 1
       window.__ORBITA_DEBUG__?.getSnapshot(),
     );
     expect(snapAfterPlayAgain?.appState).toBe('PLAYING');
+    expect(snapAfterPlayAgain?.currentSectorNumber).toBe(1);
     expect(snapAfterPlayAgain?.deliveriesCompleted).toBe(0);
 
     expect(consoleErrors).toEqual([]);

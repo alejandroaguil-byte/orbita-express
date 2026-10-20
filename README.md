@@ -1,6 +1,6 @@
 # Órbita Express
 
-**Órbita Express** es un arcade espacial de partidas cortas (`≤ 65 s`) para jugar desde un navegador móvil (Android) o de escritorio. Asumís el rol de un repartidor interplanetario que debe completar **3 entregas** saltando de órbita en órbita con un único control antes de que se agote la cuenta regresiva.
+**Órbita Express** es un arcade espacial de partidas cortas (`≤ 90 s`) para jugar desde un navegador móvil (Android) o de escritorio. Asumís el rol de un repartidor interplanetario que debe superar **3 sectores de dificultad creciente** saltando de órbita en órbita con un único control antes de que se agote la cuenta regresiva.
 
 ---
 
@@ -31,12 +31,13 @@ Abrí **`http://127.0.0.1:5173`** en tu navegador y presioná **Comenzar reparto
 | **Pausar / Reanudar** | Botón **Pausar / Continuar** | Tecla **`P`** o **`Escape`** |
 | **Silenciar audio** | Botón **Sonido: Sí / No** | Navegable con `Tab` + `Enter` |
 
-### Reglas de la partida
-1. **Órbita continua**: Tu nave gira alrededor de un planeta. Mientras mantenés presionado, ves la guía tangencial de salida actualizándose en vivo.
-2. **Captura suave**: Al entrar en el anillo punteado (`captureRadius`) de otro planeta, la nave se incorpora suavemente a su órbita conservando el sentido de giro según el ángulo de entrada.
-3. **Objetivo (`★ DESTINO`)**: Llegar al planeta marcado con corchetes dorados y la etiqueta `★ DESTINO` completa una entrega y asigna inmediatamente el siguiente destino.
-4. **Riesgo y recuperación**: Salir de los límites del sector o chocar contra un **asteroide estático** descuenta **`5 s`** del reloj una única vez, reinicia el combo y devuelve la nave al último planeta seguro.
-5. **Fin del turno**: La partida termina al completar las **3 entregas** (victoria con bonus de tiempo) o cuando el reloj llega a **`0.0s`**.
+### Progresión de sectores (Dificultad creciente)
+Cada partida recorre **3 sectores diseñados a mano** (`CAMPAIGN_STAGES`):
+1. **Sector 1 — Corredor Orbital Alfa (`Calentamiento`)**: Zonas de captura amplias (`72`–`80 u`), velocidades orbitales moderadas (`2.1`–`2.3 rad/s`) y 3 asteroides estáticos.
+2. **Sector 2 — Cinturón de Cobalto (`Riesgo Medio`)**: Órbitas más ágiles (`2.4`–`2.6 rad/s`), radios de captura intermedios (`68`–`72 u`), inversión de giro inicial y 4 asteroides en la diagonal principal.
+3. **Sector 3 — Tormenta Esmeralda (`Sector Crítico`)**: Alta velocidad orbital (`2.65`–`2.85 rad/s`), zonas de captura exigentes (`64`–`68 u`) y 5 asteroides custodiando el ascenso a la Cúpula Zenith.
+
+Al completar la entrega de un sector, avanzás automáticamente al siguiente corredor y recibís **`+12 s`** de tiempo extra (con tope estricto en `90 s`).
 
 ---
 
@@ -47,9 +48,10 @@ Definidas en [`src/config/gameConfig.ts`](./src/config/gameConfig.ts) e implemen
 | Concepto | Fórmula / Valor | Ejemplo |
 | :--- | :--- | :--- |
 | **Puntos por entrega** | `250 + (combo - 1) × 125` | 1.ª: `250` · 2.ª seguida: `375` · 3.ª seguida: `500` |
-| **Bonus de tiempo final** | `Math.floor(remainingTime) × 15` *(solo al completar 3/3)* | Sobran `32.8 s` → `32 × 15 = +480 pts` |
+| **Bonus de tiempo final** | `Math.floor(remainingTime) × 15` *(al superar los 3 sectores)* | Sobran `32.8 s` → `32 × 15 = +480 pts` |
+| **Recarga por sector** | `+12 s` al avanzar de sector *(tope máximo `90 s`)* | Premia superar rápido los primeros sectores |
 | **Penalización por fallo** | `-5 s` al reloj y `combo = 0` | Se aplica una sola vez por desvío o impacto |
-| **Duración del turno** | `65 s` de tiempo activo | No corre en pantalla de inicio, pausa ni pestaña oculta |
+| **Reloj inicial** | `65 s` de tiempo activo | No corre en pantalla de inicio, pausa ni pestaña oculta |
 
 ---
 
@@ -66,31 +68,26 @@ orbita-express/
 │   │   └── game.ts             # Contrato único de tipos, estados, comandos de entrada y GameSnapshot
 │   ├── config/
 │   │   ├── gameConfig.ts       # Parámetros físicos, radios, tiempos y constantes de puntuación
-│   │   └── stage1.ts           # Escenario fijo "Corredor Orbital Alfa" (5 planetas + 3 asteroides)
+│   │   └── stage1.ts           # Catálogo CAMPAIGN_STAGES (STAGE_1, STAGE_2 y STAGE_3)
 │   ├── core/
 │   │   ├── geometry.ts         # Posición orbital, tangentes y barrido continuo segmento-círculo
 │   │   ├── scoring.ts          # Cálculo determinista de puntos por entrega, combo y bonus de tiempo
-│   │   └── simulation.ts       # Máquina de estados y física arcade determinista (sin dependencias de DOM)
+│   │   └── simulation.ts       # Máquina de estados, progresión de sectores y física determinista
 │   ├── input/
 │   │   └── inputController.ts  # Pointer Events unificados + teclado + auto-pausa por visibilidad
 │   ├── render/
 │   │   └── canvasRenderer.ts   # Renderizado vectorial en coordenadas lógicas (540×960) con DPR acotado
 │   ├── ui/
-│   │   ├── hud.ts              # Sincronización del HUD, modales y gestión de foco para teclado
+│   │   ├── hud.ts              # Sincronización del HUD, indicador de sector, modales y foco de teclado
 │   │   └── styles.css          # Diseño adaptable desde 360 px, touch-action local y reduced-motion
 │   ├── audio/
 │   │   └── soundEffects.ts     # Efectos sintetizados con Web Audio API (sin assets externos)
 │   └── storage/
 │       └── storage.ts          # Persistencia local versionada y validada (orbita_express_save_v1)
 └── tests/
-    ├── unit/                   # 23 pruebas deterministas en Vitest (geometría, simulación, puntos, storage)
+    ├── unit/                   # 23 pruebas deterministas en Vitest (geometría, campaña, puntos, storage)
     └── e2e/                    # Pruebas de navegador en Playwright (escritorio + móvil 360×640)
 ```
-
-### Decisiones técnicas principales
-- **Coordenadas lógicas independientes (`540 × 960`)**: El escenario mantiene siempre su proporción mediante *letterboxing*; redimensionar la ventana nunca altera la física ni reinicia la partida.
-- **Colisión continua por barrido (`intersectSegmentCircle`)**: Cada paso de vuelo evalúa el segmento completo entre `t` y `t + dt`, evitando que la nave atraviese zonas de captura u obstáculos.
-- **No-recaptura y desempate determinista**: Al despegar, el planeta de origen queda bloqueado hasta superar `captureRadius + 14 u`. Si dos zonas de captura se solapan, gana el menor tiempo de impacto `t ∈ [0, 1]`, luego la menor distancia al centro y finalmente el `id` lexicográfico.
 
 ---
 

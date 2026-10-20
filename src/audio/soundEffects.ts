@@ -77,6 +77,9 @@ export class SoundEffectsController {
         case 'DELIVERY_COMPLETED':
           this.playChord([523.25, 659.25, 783.99], 0.16, 0.1);
           break;
+        case 'SECTOR_ADVANCED':
+          this.playChord([587.33, 739.99, 880], 0.22, 0.11);
+          break;
         case 'SHIP_ASTEROID_HIT':
         case 'SHIP_OUT_OF_BOUNDS':
           this.playTone(190, 95, 0.18, 'sawtooth', 0.1);

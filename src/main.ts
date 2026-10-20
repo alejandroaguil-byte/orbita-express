@@ -1,7 +1,7 @@
 import './ui/styles.css';
 import { SoundEffectsController } from './audio/soundEffects';
 import { GAME_CONFIG } from './config/gameConfig';
-import { STAGE_1 } from './config/stage1';
+import { CAMPAIGN_STAGES } from './config/stage1';
 import { SimulationEngine } from './core/simulation';
 import { InputController } from './input/inputController';
 import { CanvasRenderer } from './render/canvasRenderer';
@@ -33,7 +33,7 @@ function bootstrapGame(): void {
   let lastSavedHighScore = persisted.highScore;
 
   const sound = new SoundEffectsController(persisted.audioMuted);
-  const engine = new SimulationEngine(STAGE_1, {
+  const engine = new SimulationEngine(CAMPAIGN_STAGES, {
     initialAppState: 'START',
     initialHighScore: persisted.highScore,
   });
@@ -104,7 +104,6 @@ function bootstrapGame(): void {
     const rawDelta = Math.max(0, (timestamp - lastTimestamp) / 1000);
     lastTimestamp = timestamp;
 
-    // Límite de recuperación temporal para evitar espirales tras pausas
     const clampedDelta = Math.min(rawDelta, GAME_CONFIG.maxFrameDelta);
     accumulator += clampedDelta;
 
@@ -123,7 +122,6 @@ function bootstrapGame(): void {
     window.requestAnimationFrame(frame);
   };
 
-  // Exponer API de inspección determinista para pruebas de integración
   window.__ORBITA_DEBUG__ = {
     getSnapshot: () => engine.getSnapshot(),
     sendCommand: (command: InputCommand) => {
