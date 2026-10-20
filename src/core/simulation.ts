@@ -27,7 +27,8 @@ import {
 import { calculateDeliveryPoints, calculateTimeBonus } from './scoring';
 
 export class SimulationEngine {
-  private readonly stage: StageDefinition;
+  private readonly stages: readonly StageDefinition[];
+  private currentStageIndex = 0;
   private appState: AppState;
   private elapsedTime = 0;
   private remainingTime: number = GAME_CONFIG.matchDurationSeconds;
@@ -35,7 +36,9 @@ export class SimulationEngine {
   private currentOrbitRadius = 0;
   private isAiming = false;
   private targetSequenceIndex = 0;
+  private sectorDeliveriesCompleted = 0;
   private deliveriesCompleted = 0;
+  private totalDeliveriesGoal = 3;
   private score = 0;
   private highScore = 0;
   private isNewHighScore = false;
@@ -51,25 +54,54 @@ export class SimulationEngine {
   private statusMessage: string | null = GAME_CONFIG.initialHelpText;
   private statusMessageTimer = 0;
 
-  constructor(stage: StageDefinition, options?: SimulationOptions) {
-    this.stage = stage;
+  constructor(
+    stageOrStages: StageDefinition | readonly StageDefinition[],
+    options?: SimulationOptions,
+  ) {
+    if (Array.isArray(stageOrStages)) {
+      if (stageOrStages.length === 0) {
+        throw new Error('Se requiere al menos un escenario para iniciar la simulación.');
+      }
+      this.stages = stageOrStages;
+    } else {
+      this.stages = [stageOrStages as StageDefinition];
+    }
+
+    this.totalDeliveriesGoal =
+      this.stages.length === 1
+        ? GAME_CONFIG.deliveriesGoal
+        : this.stages.reduce((acc, st) => acc + Math.max(1, st.deliveriesRequired ?? 1), 0);
+
     this.highScore = Math.max(0, Math.floor(options?.initialHighScore ?? 0));
     this.appState = options?.initialAppState ?? 'PLAYING';
     this.resetMatchState(this.appState);
   }
 
+  private getCurrentStage(): StageDefinition {
+    return this.stages[this.currentStageIndex];
+  }
+
+  private getCurrentSectorGoal(): number {
+    if (this.stages.length === 1) {
+      return this.totalDeliveriesGoal;
+    }
+    return Math.max(1, this.getCurrentStage().deliveriesRequired ?? 1);
+  }
+
   private getPlanetById(planetId: string): PlanetDefinition {
-    const found = this.stage.planets.find((p) => p.id === planetId);
+    const found = this.getCurrentStage().planets.find((p) => p.id === planetId);
     if (!found) {
       throw new Error(`Planeta no encontrado en el escenario: ${planetId}`);
     }
     return found;
   }
 
-  private resetMatchState(targetAppState: AppState): void {
-    const startPlanet = this.getPlanetById(this.stage.startPlanetId);
-    const startAngle = this.stage.startOrbitAngle;
-    const startDir = this.stage.startOrbitDirection;
+  private setupStageState(stageIndex: number): void {
+    this.currentStageIndex = stageIndex;
+    const stage = this.getCurrentStage();
+    const startPlanet = this.getPlanetById(stage.startPlanetId);
+    const startAngle = stage.startOrbitAngle;
+    const startDir = stage.startOrbitDirection;
     const startPos = computeOrbitPosition(
       startPlanet.position,
       startPlanet.orbitRadius,
@@ -77,26 +109,10 @@ export class SimulationEngine {
     );
     const tangent = computeOrbitTangent(startAngle, startDir);
 
-    this.appState = targetAppState;
-    this.elapsedTime = 0;
-    this.remainingTime = GAME_CONFIG.matchDurationSeconds;
     this.currentOrbitRadius = startPlanet.orbitRadius;
     this.isAiming = false;
     this.targetSequenceIndex = 0;
-    this.deliveriesCompleted = 0;
-    this.score = 0;
-    this.isNewHighScore = false;
-    this.combo = 0;
-    this.maxCombo = 0;
-    this.lastDeliveryPoints = 0;
-    this.timeBonusPoints = 0;
-    this.gameOverReason = null;
-    this.jumpCount = 0;
-    this.outOfBoundsCount = 0;
-    this.asteroidHitsCount = 0;
-    this.deliveryEffect = null;
-    this.statusMessage = GAME_CONFIG.initialHelpText;
-    this.statusMessageTimer = 0;
+    this.sectorDeliveriesCompleted = 0;
 
     this.ship = {
       mode: 'ORBITING',
@@ -116,10 +132,33 @@ export class SimulationEngine {
     };
   }
 
+  private resetMatchState(targetAppState: AppState): void {
+    this.appState = targetAppState;
+    this.elapsedTime = 0;
+    this.remainingTime = GAME_CONFIG.matchDurationSeconds;
+    this.deliveriesCompleted = 0;
+    this.score = 0;
+    this.isNewHighScore = false;
+    this.combo = 0;
+    this.maxCombo = 0;
+    this.lastDeliveryPoints = 0;
+    this.timeBonusPoints = 0;
+    this.gameOverReason = null;
+    this.jumpCount = 0;
+    this.outOfBoundsCount = 0;
+    this.asteroidHitsCount = 0;
+    this.deliveryEffect = null;
+    this.statusMessage = GAME_CONFIG.initialHelpText;
+    this.statusMessageTimer = 0;
+
+    this.setupStageState(0);
+  }
+
   public getTargetPlanetId(): string {
-    const seq = this.stage.targetSequence;
+    const stage = this.getCurrentStage();
+    const seq = stage.targetSequence;
     if (seq.length === 0) {
-      return this.stage.startPlanetId;
+      return stage.startPlanetId;
     }
     return seq[this.targetSequenceIndex % seq.length];
   }
@@ -242,7 +281,6 @@ export class SimulationEngine {
       this.stepRecovering(dt, events);
     }
 
-    // Si la partida no terminó ya por entregas o penalización, comprobar cuenta regresiva
     if (this.appState === 'PLAYING' && this.remainingTime <= 0) {
       this.finishMatch('TIME_EXPIRED', events);
     }
@@ -254,7 +292,6 @@ export class SimulationEngine {
     if (!this.ship.currentPlanetId) return;
     const planet = this.getPlanetById(this.ship.currentPlanetId);
 
-    // Convergencia suave desde el radio de captura hasta el radio orbital nominal
     const radiusDiff = planet.orbitRadius - this.currentOrbitRadius;
     if (Math.abs(radiusDiff) > 0.05) {
       const blend = Math.min(1, dt * 14);
@@ -279,13 +316,13 @@ export class SimulationEngine {
   }
 
   private stepFlying(dt: number, events: SimulationEvent[]): void {
+    const stage = this.getCurrentStage();
     const startPos = this.ship.position;
     const endPos: Vector2D = {
       x: startPos.x + this.ship.velocity.x * dt,
       y: startPos.y + this.ship.velocity.y * dt,
     };
 
-    // 1. Verificar si el planeta de origen ya puede desbloquearse al alejarse lo suficiente
     let originLockedId = this.ship.originPlanetLockedId;
     if (originLockedId !== null) {
       const originPlanet = this.getPlanetById(originLockedId);
@@ -296,7 +333,6 @@ export class SimulationEngine {
       }
     }
 
-    // 2. Buscar colisiones con asteroides estáticos (barrido continuo)
     interface AsteroidCandidate {
       readonly asteroid: AsteroidDefinition;
       readonly t: number;
@@ -304,7 +340,7 @@ export class SimulationEngine {
     }
 
     const asteroidHits: AsteroidCandidate[] = [];
-    for (const asteroid of this.stage.asteroids) {
+    for (const asteroid of stage.asteroids) {
       const hit = intersectSegmentCircle(startPos, endPos, asteroid.position, asteroid.radius);
       if (hit !== null) {
         asteroidHits.push({
@@ -322,7 +358,6 @@ export class SimulationEngine {
       return a.asteroid.id.localeCompare(b.asteroid.id);
     });
 
-    // 3. Buscar capturas candidatas de planetas con desempate determinista
     interface CaptureCandidate {
       readonly planet: PlanetDefinition;
       readonly t: number;
@@ -331,7 +366,7 @@ export class SimulationEngine {
     }
 
     const captureCandidates: CaptureCandidate[] = [];
-    for (const planet of this.stage.planets) {
+    for (const planet of stage.planets) {
       if (planet.id === originLockedId) {
         continue;
       }
@@ -360,7 +395,6 @@ export class SimulationEngine {
     const firstAsteroid = asteroidHits[0] ?? null;
     const firstCapture = captureCandidates[0] ?? null;
 
-    // Resolver lo que ocurra primero a lo largo del segmento de vuelo
     if (firstAsteroid !== null && (firstCapture === null || firstAsteroid.t <= firstCapture.t)) {
       this.triggerFlightFailure(
         'ASTEROID_HIT',
@@ -376,20 +410,18 @@ export class SimulationEngine {
       return;
     }
 
-    // 4. Verificar si salió de los límites válidos del escenario
     const margin = GAME_CONFIG.outOfBoundsMargin;
     const isOut =
       endPos.x < -margin ||
-      endPos.x > this.stage.worldWidth + margin ||
+      endPos.x > stage.worldWidth + margin ||
       endPos.y < -margin ||
-      endPos.y > this.stage.worldHeight + margin;
+      endPos.y > stage.worldHeight + margin;
 
     if (isOut) {
       this.triggerFlightFailure('OUT_OF_BOUNDS', endPos, events);
       return;
     }
 
-    // 5. Continuar vuelo rectilíneo normal
     this.ship = {
       ...this.ship,
       position: endPos,
@@ -403,6 +435,7 @@ export class SimulationEngine {
     entryPoint: Vector2D,
     events: SimulationEvent[],
   ): void {
+    const stage = this.getCurrentStage();
     const { orbitAngle, orbitDirection } = computeCaptureOrbitParams(
       planet.position,
       entryPoint,
@@ -438,9 +471,9 @@ export class SimulationEngine {
 
     events.push({ type: 'PLANET_CAPTURED', planetId: planet.id });
 
-    // Si el planeta capturado es el destino actual, registrar entrega, puntos y combo
     if (planet.id === this.getTargetPlanetId()) {
       this.deliveriesCompleted += 1;
+      this.sectorDeliveriesCompleted += 1;
       this.combo += 1;
       if (this.combo > this.maxCombo) {
         this.maxCombo = this.combo;
@@ -462,21 +495,49 @@ export class SimulationEngine {
         type: 'DELIVERY_COMPLETED',
         planetId: planet.id,
         deliveryNumber: this.deliveriesCompleted,
+        sectorNumber: stage.sectorNumber,
         pointsAwarded: deliveryPoints,
       });
 
-      if (this.deliveriesCompleted >= GAME_CONFIG.deliveriesGoal) {
+      // ¿Completamos todas las entregas de la campaña o escenario?
+      if (this.deliveriesCompleted >= this.totalDeliveriesGoal) {
         const timeBonus = calculateTimeBonus(this.remainingTime);
         this.timeBonusPoints = timeBonus;
         this.addScore(timeBonus);
-        this.statusMessage = `¡Reparto completado! +${deliveryPoints} pts (Bonus tiempo: +${timeBonus})`;
+        this.statusMessage = `¡Campaña completada! +${deliveryPoints} pts (Bonus tiempo: +${timeBonus})`;
         this.statusMessageTimer = 4.0;
         this.finishMatch('DELIVERIES_COMPLETED', events);
         return;
       }
 
+      // ¿Completamos las entregas requeridas del sector actual y hay un siguiente sector?
+      if (
+        this.sectorDeliveriesCompleted >= this.getCurrentSectorGoal() &&
+        this.currentStageIndex + 1 < this.stages.length
+      ) {
+        const nextStageIndex = this.currentStageIndex + 1;
+        this.setupStageState(nextStageIndex);
+        const nextStage = this.getCurrentStage();
+        const nextTarget = this.getPlanetById(this.getTargetPlanetId());
+
+        this.remainingTime = Math.min(
+          GAME_CONFIG.maxMatchCapSeconds,
+          this.remainingTime + GAME_CONFIG.sectorClearTimeBonusSeconds,
+        );
+
+        this.statusMessage = `¡Sector ${nextStage.sectorNumber}: ${nextStage.name} (${nextStage.difficultyLabel})! +${GAME_CONFIG.sectorClearTimeBonusSeconds}s · Destino: ${nextTarget.name}`;
+        this.statusMessageTimer = 4.0;
+
+        events.push({
+          type: 'SECTOR_ADVANCED',
+          sectorNumber: nextStage.sectorNumber,
+          planetId: nextTarget.id,
+        });
+        return;
+      }
+
       this.targetSequenceIndex += 1;
-      if (this.getTargetPlanetId() === planet.id && this.stage.targetSequence.length > 1) {
+      if (this.getTargetPlanetId() === planet.id && stage.targetSequence.length > 1) {
         this.targetSequenceIndex += 1;
       }
 
@@ -497,8 +558,6 @@ export class SimulationEngine {
     events: SimulationEvent[],
     asteroidId?: string,
   ): void {
-    // Solo puede invocarse desde FLYING: cambia inmediatamente a RECOVERING o RESULT,
-    // garantizando que nunca se aplique doble penalización por el mismo fallo.
     this.isAiming = false;
     this.combo = 0;
     this.remainingTime = Math.max(
@@ -636,6 +695,7 @@ export class SimulationEngine {
   }
 
   public getSnapshot(): GameSnapshot {
+    const currentStage = this.getCurrentStage();
     return {
       appState: this.appState,
       elapsedTime: this.elapsedTime,
@@ -644,8 +704,12 @@ export class SimulationEngine {
       ship: this.ship,
       aimGuide: this.computeAimGuide(),
       targetPlanetId: this.getTargetPlanetId(),
+      currentSectorNumber: currentStage.sectorNumber,
+      totalSectors: this.stages.length,
+      sectorDeliveriesCompleted: this.sectorDeliveriesCompleted,
+      sectorDeliveriesGoal: this.getCurrentSectorGoal(),
       deliveriesCompleted: this.deliveriesCompleted,
-      totalDeliveriesGoal: GAME_CONFIG.deliveriesGoal,
+      totalDeliveriesGoal: this.totalDeliveriesGoal,
       score: this.score,
       highScore: this.highScore,
       isNewHighScore: this.isNewHighScore,
@@ -660,7 +724,7 @@ export class SimulationEngine {
       deliveryEffect: this.deliveryEffect,
       statusMessage: this.statusMessage,
       statusMessageTimer: this.statusMessageTimer,
-      stage: this.stage,
+      stage: currentStage,
     };
   }
 }

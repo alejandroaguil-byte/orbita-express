@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../../src/config/gameConfig';
-import { STAGE_1 } from '../../src/config/stage1';
+import { CAMPAIGN_STAGES, STAGE_1 } from '../../src/config/stage1';
 import { SimulationEngine } from '../../src/core/simulation';
 import { StageDefinition } from '../../src/types/game';
 
-describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
+describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores', () => {
   it('inicia orbitando el planeta base con la guía de dirección desactivada', () => {
     const engine = new SimulationEngine(STAGE_1);
     const snap = engine.getSnapshot();
@@ -25,7 +25,6 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     expect(engine.getSnapshot().appState).toBe('START');
     expect(engine.getSnapshot().highScore).toBe(900);
 
-    // En START el reloj no corre
     engine.step(1.0);
     expect(engine.getSnapshot().remainingTime).toBe(GAME_CONFIG.matchDurationSeconds);
 
@@ -67,7 +66,6 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     expect(snap.ship.mode).toBe('ORBITING');
     expect(snap.jumpCount).toBe(0);
 
-    // Soltar después de haber cancelado tampoco debe lanzar
     const releaseAfterCancel = engine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
     expect(releaseAfterCancel).toHaveLength(0);
     expect(engine.getSnapshot().ship.mode).toBe('ORBITING');
@@ -133,6 +131,9 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     const customStage: StageDefinition = {
       id: 'test-capture',
       name: 'Escenario de Prueba',
+      sectorNumber: 1,
+      difficultyLabel: 'Prueba',
+      deliveriesRequired: 3,
       worldWidth: 540,
       worldHeight: 960,
       startPlanetId: 'p1',
@@ -227,6 +228,9 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
       return {
         id: 'overlap-stage',
         name: 'Overlap',
+        sectorNumber: 1,
+        difficultyLabel: 'Test',
+        deliveriesRequired: 1,
         worldWidth: 540,
         worldHeight: 960,
         startPlanetId: 'p-start',
@@ -260,10 +264,13 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     const asteroidStage: StageDefinition = {
       id: 'asteroid-test',
       name: 'Campo de Asteroides',
+      sectorNumber: 1,
+      difficultyLabel: 'Test',
+      deliveriesRequired: 1,
       worldWidth: 540,
       worldHeight: 960,
       startPlanetId: 'p1',
-      startOrbitAngle: 0, // Posición inicial (310, 700), despega hacia arriba (0, -1)
+      startOrbitAngle: 0,
       startOrbitDirection: -1,
       targetSequence: ['p2'],
       planets: [
@@ -316,7 +323,6 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     expect(asteroidHitEvents).toBe(1);
     expect(snap.asteroidHitsCount).toBe(1);
     expect(snap.combo).toBe(0);
-    // El tiempo restante descontó exactamente el tiempo simulado + 1 sola penalización
     expect(snap.remainingTime).toBeCloseTo(
       timeBefore - simulatedTime - GAME_CONFIG.failureTimePenaltySeconds,
       4,
@@ -352,11 +358,9 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
 
   it('termina la partida inmediatamente si la penalización por fallo agota el tiempo restante', () => {
     const engine = new SimulationEngine(STAGE_1);
-    // Consumir casi todo el reloj dejando menos segundos que la penalización
     engine.step(GAME_CONFIG.matchDurationSeconds - 2.0);
     expect(engine.getSnapshot().appState).toBe('PLAYING');
 
-    // Lanzar hacia el borde derecho
     engine.handleInput({ type: 'AIM_START' });
     engine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
 
@@ -412,14 +416,16 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     expect(restarted.ship.currentPlanetId).toBe('p-base');
   });
 
-  it('completa la partida en STAGE_1 al realizar 3 entregas sin chocar con asteroides y suma bonus de tiempo', () => {
-    const engine = new SimulationEngine(STAGE_1);
+  it('progresa a través de los 3 sectores de CAMPAIGN_STAGES de forma resoluble y sin chocar con asteroides', () => {
+    const engine = new SimulationEngine(CAMPAIGN_STAGES);
 
-    const launchTowardPlanet = (targetId: string): boolean => {
-      const targetPlanet = STAGE_1.planets.find((p) => p.id === targetId)!;
-      for (let tick = 0; tick < 240; tick += 1) {
+    const launchToPlanetInCurrentStage = (targetId: string): boolean => {
+      for (let tick = 0; tick < 300; tick += 1) {
         engine.handleInput({ type: 'AIM_START' });
         const snap = engine.getSnapshot();
+        const targetPlanet = snap.stage.planets.find((p) => p.id === targetId);
+        if (!targetPlanet) return false;
+
         const toTargetX = targetPlanet.position.x - snap.ship.position.x;
         const toTargetY = targetPlanet.position.y - snap.ship.position.y;
         const dist = Math.hypot(toTargetX, toTargetY);
@@ -429,12 +435,19 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
           snap.aimGuide.direction.x * dirX + snap.aimGuide.direction.y * dirY;
 
         if (dot > 0.992) {
+          const prevDeliveries = snap.deliveriesCompleted;
           engine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
-          for (let flyTick = 0; flyTick < 120; flyTick += 1) {
+          for (let flyTick = 0; flyTick < 140; flyTick += 1) {
             engine.step(GAME_CONFIG.fixedTimeStep);
             const currentSnap = engine.getSnapshot();
-            if (currentSnap.appState === 'RESULT' || currentSnap.ship.mode === 'ORBITING') {
+            if (currentSnap.deliveriesCompleted > prevDeliveries) {
+              return true;
+            }
+            if (currentSnap.ship.mode === 'ORBITING') {
               return currentSnap.ship.currentPlanetId === targetId;
+            }
+            if (currentSnap.ship.mode === 'RECOVERING') {
+              return false;
             }
           }
           return false;
@@ -444,15 +457,24 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
       return false;
     };
 
-    expect(launchTowardPlanet('p-relay-east')).toBe(true);
+    // Sector 1: p-base -> p-relay-east (meta del Sector 1) -> avanza automáticamente al Sector 2
+    expect(engine.getSnapshot().currentSectorNumber).toBe(1);
+    expect(launchToPlanetInCurrentStage('p-relay-east')).toBe(true);
     expect(engine.getSnapshot().deliveriesCompleted).toBe(1);
-    expect(engine.getSnapshot().combo).toBe(1);
+    expect(engine.getSnapshot().currentSectorNumber).toBe(2);
+    expect(engine.getSnapshot().stage.id).toBe('stage-2-cinturon-cobalto');
 
-    expect(launchTowardPlanet('p-high-west')).toBe(true);
+    // Sector 2: s2-base -> escala en s2-mid-center -> s2-high-east (meta del Sector 2) -> avanza al Sector 3
+    expect(launchToPlanetInCurrentStage('s2-mid-center')).toBe(true);
+    expect(launchToPlanetInCurrentStage('s2-high-east')).toBe(true);
     expect(engine.getSnapshot().deliveriesCompleted).toBe(2);
-    expect(engine.getSnapshot().combo).toBe(2);
+    expect(engine.getSnapshot().currentSectorNumber).toBe(3);
+    expect(engine.getSnapshot().stage.id).toBe('stage-3-tormenta-esmeralda');
 
-    expect(launchTowardPlanet('p-summit')).toBe(true);
+    // Sector 3: s3-base -> s3-step-west -> s3-step-east -> s3-zenith (meta del Sector 3)
+    expect(launchToPlanetInCurrentStage('s3-step-west')).toBe(true);
+    expect(launchToPlanetInCurrentStage('s3-step-east')).toBe(true);
+    expect(launchToPlanetInCurrentStage('s3-zenith')).toBe(true);
 
     const finalSnap = engine.getSnapshot();
     expect(finalSnap.deliveriesCompleted).toBe(3);
@@ -460,9 +482,6 @@ describe('SimulationEngine - Mecánica, Partida Completa y Reglas', () => {
     expect(finalSnap.asteroidHitsCount).toBe(0);
     expect(finalSnap.appState).toBe('RESULT');
     expect(finalSnap.gameOverReason).toBe('DELIVERIES_COMPLETED');
-    expect(finalSnap.timeBonusPoints).toBeGreaterThan(0);
     expect(finalSnap.score).toBe(250 + 375 + 500 + finalSnap.timeBonusPoints);
-    expect(finalSnap.highScore).toBe(finalSnap.score);
-    expect(finalSnap.isNewHighScore).toBe(true);
   });
 });

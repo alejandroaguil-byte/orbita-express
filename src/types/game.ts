@@ -40,6 +40,9 @@ export interface AsteroidDefinition {
 export interface StageDefinition {
   readonly id: string;
   readonly name: string;
+  readonly sectorNumber: number;
+  readonly difficultyLabel: string;
+  readonly deliveriesRequired: number;
   readonly worldWidth: number;
   readonly worldHeight: number;
   readonly startPlanetId: string;
@@ -100,6 +103,7 @@ export type SimulationEventType =
   | 'SHIP_LAUNCHED'
   | 'PLANET_CAPTURED'
   | 'DELIVERY_COMPLETED'
+  | 'SECTOR_ADVANCED'
   | 'ORIGIN_UNLOCKED'
   | 'SHIP_OUT_OF_BOUNDS'
   | 'SHIP_ASTEROID_HIT'
@@ -111,6 +115,7 @@ export interface SimulationEvent {
   readonly planetId?: string;
   readonly asteroidId?: string;
   readonly deliveryNumber?: number;
+  readonly sectorNumber?: number;
   readonly pointsAwarded?: number;
   readonly gameOverReason?: GameOverReason;
 }
@@ -137,6 +142,10 @@ export interface GameSnapshot {
   readonly ship: ShipState;
   readonly aimGuide: AimGuideState;
   readonly targetPlanetId: string;
+  readonly currentSectorNumber: number;
+  readonly totalSectors: number;
+  readonly sectorDeliveriesCompleted: number;
+  readonly sectorDeliveriesGoal: number;
   readonly deliveriesCompleted: number;
   readonly totalDeliveriesGoal: number;
   readonly score: number;

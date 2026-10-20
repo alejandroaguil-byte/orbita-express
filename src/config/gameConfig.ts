@@ -6,7 +6,7 @@
  *    puntosEntrega = baseDeliveryPoints + (combo - 1) * comboStepBonus
  *    Ejemplo: 1ª entrega = 250, 2ª consecutiva = 375, 3ª consecutiva = 500.
  *
- * 2) Bonus por tiempo restante (solo al completar las 3 entregas):
+ * 2) Bonus por tiempo restante (al completar todos los sectores de la partida):
  *    bonusTiempo = Math.floor(remainingTime) * timeBonusPerSecond
  */
 export const GAME_CONFIG = {
@@ -23,8 +23,14 @@ export const GAME_CONFIG = {
   /** Límite máximo de devicePixelRatio para equilibrar nitidez y rendimiento móvil */
   maxDevicePixelRatio: 2,
 
-  /** Duración máxima de la partida en segundos (pilar: <= 90 segundos) */
+  /** Duración inicial de la partida en segundos (pilar: <= 90 segundos) */
   matchDurationSeconds: 65,
+
+  /** Tope absoluto del reloj de partida en segundos (pilar estricto <= 90 s) */
+  maxMatchCapSeconds: 90,
+
+  /** Segundos extra otorgados al completar un sector y avanzar al siguiente */
+  sectorClearTimeBonusSeconds: 12,
 
   /** Penalización al tiempo restante por salir del escenario o chocar con un asteroide (segundos) */
   failureTimePenaltySeconds: 5,
@@ -56,7 +62,7 @@ export const GAME_CONFIG = {
   /** Cantidad máxima de puntos guardados para dibujar la estela de la nave */
   maxTrailPoints: 18,
 
-  /** Meta de entregas para completar la partida */
+  /** Meta por defecto de entregas en escenarios individuales */
   deliveriesGoal: 3,
 
   /** Puntos base otorgados por cada entrega completada */
@@ -65,7 +71,7 @@ export const GAME_CONFIG = {
   /** Puntos extra por cada eslabón de entregas consecutivas sin fallos */
   comboStepBonus: 125,
 
-  /** Puntos de bonus por cada segundo entero restante al completar las 3 entregas */
+  /** Puntos de bonus por cada segundo entero restante al completar la partida */
   timeBonusPerSecond: 15,
 
   /** Texto de ayuda inicial obligatorio */

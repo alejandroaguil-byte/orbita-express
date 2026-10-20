@@ -2,16 +2,15 @@ import { StageDefinition } from '../types/game';
 import { GAME_CONFIG } from './gameConfig';
 
 /**
- * Primer escenario fijo diseñado a mano: "Corredor Orbital Alfa".
- * Cinco planetas distribuidos verticalmente con zonas de captura generosas
- * y tres asteroides estáticos que separan rutas sencillas de atajos arriesgados:
- * - Las rutas directas p-base -> p-relay-east -> p-high-west -> p-summit están despejadas
- *   si el jugador lanza en la ventana correcta.
- * - Los asteroides penalizan lanzamientos apresurados por el centro o los flancos.
+ * Sector 1 (Fácil / Calentamiento): "Corredor Orbital Alfa".
+ * Zonas de captura generosas (72-80 u) y velocidades orbitales moderadas (2.1-2.4 rad/s).
  */
 export const STAGE_1: StageDefinition = {
   id: 'stage-1-corredor-alfa',
   name: 'Corredor Orbital Alfa',
+  sectorNumber: 1,
+  difficultyLabel: 'Calentamiento',
+  deliveriesRequired: 1,
   worldWidth: GAME_CONFIG.worldWidth,
   worldHeight: GAME_CONFIG.worldHeight,
   startPlanetId: 'p-base',
@@ -26,7 +25,7 @@ export const STAGE_1: StageDefinition = {
       visualRadius: 30,
       orbitRadius: 50,
       captureRadius: 78,
-      angularSpeed: 2.2,
+      angularSpeed: 2.15,
       color: '#38bdf8',
       accentColor: '#bae6fd',
     },
@@ -37,7 +36,7 @@ export const STAGE_1: StageDefinition = {
       visualRadius: 26,
       orbitRadius: 44,
       captureRadius: 72,
-      angularSpeed: 2.4,
+      angularSpeed: 2.3,
       color: '#fb7185',
       accentColor: '#fecdd3',
     },
@@ -48,7 +47,7 @@ export const STAGE_1: StageDefinition = {
       visualRadius: 28,
       orbitRadius: 46,
       captureRadius: 74,
-      angularSpeed: 2.25,
+      angularSpeed: 2.2,
       color: '#fbbf24',
       accentColor: '#fde68a',
     },
@@ -59,7 +58,7 @@ export const STAGE_1: StageDefinition = {
       visualRadius: 28,
       orbitRadius: 46,
       captureRadius: 74,
-      angularSpeed: 2.35,
+      angularSpeed: 2.3,
       color: '#a78bfa',
       accentColor: '#ddd6fe',
     },
@@ -93,3 +92,213 @@ export const STAGE_1: StageDefinition = {
     },
   ],
 };
+
+/**
+ * Sector 2 (Riesgo Medio): "Cinturón de Cobalto".
+ * Órbitas más ágiles (2.4-2.65 rad/s), radios de captura intermedios (66-72 u)
+ * y 4 asteroides custodiando el paso diagonal hacia el norte.
+ */
+export const STAGE_2: StageDefinition = {
+  id: 'stage-2-cinturon-cobalto',
+  name: 'Cinturón de Cobalto',
+  sectorNumber: 2,
+  difficultyLabel: 'Riesgo Medio',
+  deliveriesRequired: 1,
+  worldWidth: GAME_CONFIG.worldWidth,
+  worldHeight: GAME_CONFIG.worldHeight,
+  startPlanetId: 's2-base',
+  startOrbitAngle: 0,
+  startOrbitDirection: -1,
+  targetSequence: ['s2-high-east', 's2-summit'],
+  planets: [
+    {
+      id: 's2-base',
+      name: 'Muelle Orión',
+      position: { x: 170, y: 815 },
+      visualRadius: 28,
+      orbitRadius: 46,
+      captureRadius: 72,
+      angularSpeed: 2.4,
+      color: '#60a5fa',
+      accentColor: '#bfdbfe',
+    },
+    {
+      id: 's2-mid-west',
+      name: 'Boyas de Titán',
+      position: { x: 145, y: 535 },
+      visualRadius: 25,
+      orbitRadius: 42,
+      captureRadius: 68,
+      angularSpeed: 2.55,
+      color: '#f472b6',
+      accentColor: '#fbcfe8',
+    },
+    {
+      id: 's2-mid-center',
+      name: 'Crucero Vórtice',
+      position: { x: 310, y: 600 },
+      visualRadius: 26,
+      orbitRadius: 44,
+      captureRadius: 70,
+      angularSpeed: 2.5,
+      color: '#fb923c',
+      accentColor: '#fed7aa',
+    },
+    {
+      id: 's2-high-east',
+      name: 'Baliza Cobalto',
+      position: { x: 390, y: 350 },
+      visualRadius: 27,
+      orbitRadius: 45,
+      captureRadius: 70,
+      angularSpeed: 2.6,
+      color: '#818cf8',
+      accentColor: '#c7d2fe',
+    },
+    {
+      id: 's2-summit',
+      name: 'Bastión Boreal',
+      position: { x: 210, y: 165 },
+      visualRadius: 29,
+      orbitRadius: 48,
+      captureRadius: 72,
+      angularSpeed: 2.45,
+      color: '#2dd4bf',
+      accentColor: '#99f6e4',
+    },
+  ],
+  asteroids: [
+    {
+      id: 's2-ast-1',
+      position: { x: 250, y: 710 },
+      radius: 19,
+    },
+    {
+      id: 's2-ast-2',
+      position: { x: 245, y: 455 },
+      radius: 21,
+    },
+    {
+      id: 's2-ast-3',
+      position: { x: 430, y: 500 },
+      radius: 20,
+    },
+    {
+      id: 's2-ast-4',
+      position: { x: 315, y: 230 },
+      radius: 20,
+    },
+  ],
+};
+
+/**
+ * Sector 3 (Clímax / Alta Velocidad): "Tormenta Esmeralda".
+ * Mayor velocidad orbital (2.65-2.9 rad/s), radios de captura más exigentes (64-68 u)
+ * y 5 asteroides en el corredor hacia la Cúpula Zenith.
+ */
+export const STAGE_3: StageDefinition = {
+  id: 'stage-3-tormenta-esmeralda',
+  name: 'Tormenta Esmeralda',
+  sectorNumber: 3,
+  difficultyLabel: 'Sector Crítico',
+  deliveriesRequired: 1,
+  worldWidth: GAME_CONFIG.worldWidth,
+  worldHeight: GAME_CONFIG.worldHeight,
+  startPlanetId: 's3-base',
+  startOrbitAngle: -Math.PI / 2,
+  startOrbitDirection: 1,
+  targetSequence: ['s3-zenith', 's3-base'],
+  planets: [
+    {
+      id: 's3-base',
+      name: 'Plataforma Centauro',
+      position: { x: 370, y: 820 },
+      visualRadius: 27,
+      orbitRadius: 45,
+      captureRadius: 68,
+      angularSpeed: 2.65,
+      color: '#38bdf8',
+      accentColor: '#bae6fd',
+    },
+    {
+      id: 's3-step-west',
+      name: 'Relé Fénix',
+      position: { x: 175, y: 635 },
+      visualRadius: 25,
+      orbitRadius: 42,
+      captureRadius: 66,
+      angularSpeed: 2.75,
+      color: '#fb7185',
+      accentColor: '#fecdd3',
+    },
+    {
+      id: 's3-step-east',
+      name: 'Aguja Solar',
+      position: { x: 385, y: 470 },
+      visualRadius: 25,
+      orbitRadius: 42,
+      captureRadius: 66,
+      angularSpeed: 2.8,
+      color: '#facc15',
+      accentColor: '#fef08a',
+    },
+    {
+      id: 's3-step-north-west',
+      name: 'Mirador Vega',
+      position: { x: 165, y: 315 },
+      visualRadius: 24,
+      orbitRadius: 40,
+      captureRadius: 64,
+      angularSpeed: 2.85,
+      color: '#c084fc',
+      accentColor: '#e9d5ff',
+    },
+    {
+      id: 's3-zenith',
+      name: 'Cúpula Zenith',
+      position: { x: 325, y: 155 },
+      visualRadius: 28,
+      orbitRadius: 46,
+      captureRadius: 68,
+      angularSpeed: 2.7,
+      color: '#34d399',
+      accentColor: '#a7f3d0',
+    },
+  ],
+  asteroids: [
+    {
+      id: 's3-ast-1',
+      position: { x: 285, y: 765 },
+      radius: 18,
+    },
+    {
+      id: 's3-ast-2',
+      position: { x: 375, y: 640 },
+      radius: 20,
+    },
+    {
+      id: 's3-ast-3',
+      position: { x: 265, y: 475 },
+      radius: 19,
+    },
+    {
+      id: 's3-ast-4',
+      position: { x: 265, y: 355 },
+      radius: 19,
+    },
+    {
+      id: 's3-ast-5',
+      position: { x: 210, y: 180 },
+      radius: 18,
+    },
+  ],
+};
+
+/**
+ * Campaña completa de 3 sectores con dificultad progresiva.
+ */
+export const CAMPAIGN_STAGES: readonly StageDefinition[] = [
+  STAGE_1,
+  STAGE_2,
+  STAGE_3,
+];
