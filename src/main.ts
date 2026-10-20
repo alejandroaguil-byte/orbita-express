@@ -43,6 +43,7 @@ function bootstrapGame(): void {
     events: readonly SimulationEvent[],
     snapshot: GameSnapshot,
   ): void => {
+    sound.syncMusicState(snapshot.appState, snapshot.currentSectorNumber);
     sound.handleSimulationEvents(events);
 
     if (snapshot.highScore > lastSavedHighScore) {
@@ -75,8 +76,10 @@ function bootstrapGame(): void {
     onCommand: handleCommand,
     onToggleMute: () => {
       const muted = sound.toggleMuted();
+      const snap = engine.getSnapshot();
+      sound.syncMusicState(snap.appState, snap.currentSectorNumber);
       savePersistedData({
-        highScore: engine.getSnapshot().highScore,
+        highScore: snap.highScore,
         audioMuted: muted,
       });
       return muted;
@@ -116,6 +119,7 @@ function bootstrapGame(): void {
     }
 
     const snapshot = engine.getSnapshot();
+    sound.syncMusicState(snapshot.appState, snapshot.currentSectorNumber);
     hud.update(snapshot);
     renderer.render(snapshot);
 
@@ -139,6 +143,7 @@ function bootstrapGame(): void {
         }
       }
       const snap = engine.getSnapshot();
+      sound.syncMusicState(snap.appState, snap.currentSectorNumber);
       hud.update(snap);
       renderer.render(snap);
     },
