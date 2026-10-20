@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Órbita Express</title>
+  </head>
+  <body>
+    <main class="app-shell" id="app-root">
+      <header class="hud-top-bar" aria-label="Panel de estado de Órbita Express">
+        <div class="hud-metrics">
+          <div class="hud-metric">
+            <span class="hud-label">Tiempo</span>
+            <span class="hud-value hud-value--timer" id="hud-time">65.0s</span>
+          </div>
+          <div class="hud-metric">
+            <span class="hud-label">Entregas</span>
+            <span class="hud-value" id="hud-deliveries">0 / 3</span>
+          </div>
+          <div class="hud-metric">
+            <span class="hud-label">Puntos</span>
+            <span class="hud-value hud-value--score" id="hud-score">0</span>
+          </div>
+          <div class="hud-metric">
+            <span class="hud-label">Combo</span>
+            <span class="hud-value hud-value--combo" id="hud-combo">x1</span>
+          </div>
+          <div class="hud-metric hud-metric--status">
+            <span class="hud-label">Estado</span>
+            <span class="hud-value" id="hud-ship-status" data-mode="orbiting">Orbitando</span>
+          </div>
+        </div>
+        <div class="hud-actions">
+          <button
+            type="button"
+            class="hud-btn hud-btn--icon"
+            id="btn-mute"
+            aria-pressed="false"
+            aria-label="Silenciar sonido"
+            title="Activar o silenciar sonido"
+          >
+            Sonido: Sí
+          </button>
+          <button type="button" class="hud-btn" id="btn-pause" aria-pressed="false">
+            Pausar
+          </button>
+          <button type="button" class="hud-btn" id="btn-restart">
+            Reiniciar
+          </button>
+        </div>
+      </header>
+
+      <div class="game-stage-container" id="stage-container">
+        <canvas
+          id="game-canvas"
+          tabindex="0"
+          aria-label="Escenario espacial de Órbita Express. Mantené presionado para ver la dirección y soltá para saltar."
+        ></canvas>
+      </div>
+
+      <footer class="hud-bottom-bar">
+        <p class="hud-help-banner" id="hud-help-banner" role="status" aria-live="polite">
+          Mantené presionado para ver la dirección. Soltá para saltar.
+        </p>
+        <p class="hud-keyboard-hint">
+          Destino actual: <strong id="hud-target-name">Faro Ámbar</strong> · Táctil / Mouse o
+          <strong>Espacio</strong> para saltar · <strong>P</strong> para pausar
+        </p>
+      </footer>
+
+      <!-- Pantalla de Inicio -->
+      <section
+        class="modal-backdrop"
+        id="start-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="start-title"
+        hidden
+      >
+        <div class="modal-card">
+          <span class="modal-eyebrow">Servicio Postal Interplanetario</span>
+          <h1 class="modal-title" id="start-title">Órbita Express</h1>
+          <p class="modal-text">
+            Completá <strong>3 entregas</strong> saltando entre planetas antes de que termine la
+            cuenta regresiva. Evitá los asteroides.
+          </p>
+          <p class="modal-instruction">
+            Mantené presionado para ver la dirección. Soltá para saltar.
+          </p>
+          <div class="modal-stats-row">
+            <div class="modal-stat-item">
+              <span class="modal-stat-label">Récord local</span>
+              <strong class="modal-stat-value" id="start-high-score">0</strong>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="hud-btn hud-btn--primary hud-btn--large" id="btn-start">
+              Comenzar reparto
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pantalla de Pausa -->
+      <section
+        class="modal-backdrop"
+        id="pause-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pause-title"
+        hidden
+      >
+        <div class="modal-card">
+          <h2 class="modal-title" id="pause-title">Juego en pausa</h2>
+          <p class="modal-text">
+            El reloj está detenido. Elegí continuar cuando estés listo.
+          </p>
+          <div class="modal-actions">
+            <button type="button" class="hud-btn hud-btn--primary" id="btn-resume">
+              Continuar
+            </button>
+            <button type="button" class="hud-btn" id="btn-restart-modal">
+              Reiniciar
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pantalla de Resultado -->
+      <section
+        class="modal-backdrop"
+        id="result-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="result-title"
+        hidden
+      >
+        <div class="modal-card">
+          <span class="modal-eyebrow" id="result-badge">Turno finalizado</span>
+          <h2 class="modal-title" id="result-title">¡Reparto completado!</h2>
+          <p class="modal-text" id="result-subtitle">
+            Entregaste todos los paquetes a tiempo.
+          </p>
+
+          <div class="modal-stats-grid">
+            <div class="modal-stat-item">
+              <span class="modal-stat-label">Entregas realizadas</span>
+              <strong class="modal-stat-value" id="result-deliveries">3 / 3</strong>
+            </div>
+            <div class="modal-stat-item">
+              <span class="modal-stat-label">Puntuación</span>
+              <strong class="modal-stat-value modal-stat-value--accent" id="result-score">0</strong>
+            </div>
+            <div class="modal-stat-item">
+              <span class="modal-stat-label">Récord local</span>
+              <strong class="modal-stat-value" id="result-high-score">0</strong>
+            </div>
+            <div class="modal-stat-item">
+              <span class="modal-stat-label">Bonus tiempo</span>
+              <strong class="modal-stat-value" id="result-time-bonus">+0</strong>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="hud-btn hud-btn--primary hud-btn--large"
+              id="btn-play-again"
+            >
+              Otra partida
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
