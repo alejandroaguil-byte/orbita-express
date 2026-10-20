@@ -10,6 +10,10 @@
       <header class="hud-top-bar" aria-label="Panel de estado de Órbita Express">
         <div class="hud-metrics">
           <div class="hud-metric">
+            <span class="hud-label">Sector</span>
+            <span class="hud-value hud-value--sector" id="hud-sector">1 / 3</span>
+          </div>
+          <div class="hud-metric">
             <span class="hud-label">Tiempo</span>
             <span class="hud-value hud-value--timer" id="hud-time">65.0s</span>
           </div>
@@ -63,8 +67,9 @@
           Mantené presionado para ver la dirección. Soltá para saltar.
         </p>
         <p class="hud-keyboard-hint">
-          Destino actual: <strong id="hud-target-name">Faro Ámbar</strong> · Táctil / Mouse o
-          <strong>Espacio</strong> para saltar · <strong>P</strong> para pausar
+          <span id="hud-sector-name">Corredor Orbital Alfa</span> · Destino:
+          <strong id="hud-target-name">Faro Ámbar</strong> · <strong>Espacio</strong> saltar ·
+          <strong>P</strong> pausar
         </p>
       </footer>
 
@@ -81,8 +86,8 @@
           <span class="modal-eyebrow">Servicio Postal Interplanetario</span>
           <h1 class="modal-title" id="start-title">Órbita Express</h1>
           <p class="modal-text">
-            Completá <strong>3 entregas</strong> saltando entre planetas antes de que termine la
-            cuenta regresiva. Evitá los asteroides.
+            Superá <strong>3 sectores</strong> de dificultad creciente saltando entre planetas antes
+            de que termine la cuenta regresiva.
           </p>
           <p class="modal-instruction">
             Mantené presionado para ver la dirección. Soltá para saltar.

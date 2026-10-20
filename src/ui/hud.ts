@@ -10,6 +10,8 @@ export interface HudCallbacks {
 
 export class HudOverlay {
   private readonly canvasEl: HTMLElement;
+  private readonly sectorEl: HTMLElement;
+  private readonly sectorNameEl: HTMLElement;
   private readonly timeEl: HTMLElement;
   private readonly deliveriesEl: HTMLElement;
   private readonly scoreEl: HTMLElement;
@@ -47,6 +49,8 @@ export class HudOverlay {
     this.callbacks = callbacks;
 
     this.canvasEl = this.requireElement(root, '#game-canvas');
+    this.sectorEl = this.requireElement(root, '#hud-sector');
+    this.sectorNameEl = this.requireElement(root, '#hud-sector-name');
     this.timeEl = this.requireElement(root, '#hud-time');
     this.deliveriesEl = this.requireElement(root, '#hud-deliveries');
     this.scoreEl = this.requireElement(root, '#hud-score');
@@ -160,6 +164,9 @@ export class HudOverlay {
   public update(snapshot: GameSnapshot): void {
     const targetPlanet = snapshot.stage.planets.find((p) => p.id === snapshot.targetPlanetId);
 
+    this.sectorEl.textContent = `${snapshot.currentSectorNumber} / ${snapshot.totalSectors}`;
+    this.sectorNameEl.textContent = `Sector ${snapshot.currentSectorNumber}: ${snapshot.stage.name} (${snapshot.stage.difficultyLabel})`;
+
     this.timeEl.textContent = `${snapshot.remainingTime.toFixed(1)}s`;
     this.timeEl.classList.toggle('hud-value--low-time', snapshot.remainingTime <= 12);
 
@@ -192,14 +199,14 @@ export class HudOverlay {
       this.resultBadgeEl.textContent = snapshot.isNewHighScore
         ? '¡Nuevo récord local!'
         : won
-          ? 'Turno completado'
+          ? 'Campaña completada'
           : 'Tiempo agotado';
       this.resultTitleEl.textContent = won
         ? '¡Reparto exitoso!'
         : 'Se acabó el tiempo';
       this.resultSubtitleEl.textContent = won
-        ? `Completaste las ${snapshot.totalDeliveriesGoal} entregas con ${snapshot.remainingTime.toFixed(1)}s de margen.`
-        : `Completaste ${snapshot.deliveriesCompleted} de ${snapshot.totalDeliveriesGoal} entregas antes del cierre.`;
+        ? `Superaste los ${snapshot.totalSectors} sectores con ${snapshot.remainingTime.toFixed(1)}s de margen.`
+        : `Alcanzaste el Sector ${snapshot.currentSectorNumber}/${snapshot.totalSectors} (${snapshot.deliveriesCompleted}/${snapshot.totalDeliveriesGoal} entregas).`;
       this.resultDeliveriesEl.textContent = `${snapshot.deliveriesCompleted} / ${snapshot.totalDeliveriesGoal}`;
       this.resultScoreEl.textContent = `${snapshot.score}`;
       this.resultHighScoreEl.textContent = `${snapshot.highScore}`;
