@@ -1,6 +1,6 @@
 # Órbita Express
 
-**Órbita Express** es un arcade espacial de partidas cortas (`≤ 90 s`) para jugar desde un navegador móvil (Android) o de escritorio. Asumís el rol de un repartidor interplanetario que debe superar **3 sectores de dificultad creciente** saltando de órbita en órbita con un único control antes de que se agote la cuenta regresiva.
+**Órbita Express** es un arcade espacial retro de partidas cortas (`≤ 90 s`) para jugar desde un navegador móvil (Android) o de escritorio, con dirección de arte **pixel-art biomecánica de 16-bits estilo *Axiom Verge*** y banda sonora electrónica espacial sintetizada en tiempo real. Asumís el rol de un repartidor interplanetario que debe superar **3 sectores de dificultad creciente** saltando de órbita en órbita con un único control antes de que se agote la cuenta regresiva.
 
 ---
 
@@ -31,13 +31,21 @@ Abrí **`http://127.0.0.1:5173`** en tu navegador y presioná **Comenzar reparto
 | **Pausar / Reanudar** | Botón **Pausar / Continuar** | Tecla **`P`** o **`Escape`** |
 | **Silenciar audio** | Botón **Sonido: Sí / No** | Navegable con `Tab` + `Enter` |
 
-### Progresión de sectores (Dificultad creciente)
-Cada partida recorre **3 sectores diseñados a mano** (`CAMPAIGN_STAGES`):
-1. **Sector 1 — Corredor Orbital Alfa (`Calentamiento`)**: Zonas de captura amplias (`72`–`80 u`), velocidades orbitales moderadas (`2.1`–`2.3 rad/s`) y 3 asteroides estáticos.
-2. **Sector 2 — Cinturón de Cobalto (`Riesgo Medio`)**: Órbitas más ágiles (`2.4`–`2.6 rad/s`), radios de captura intermedios (`68`–`72 u`), inversión de giro inicial y 4 asteroides en la diagonal principal.
-3. **Sector 3 — Tormenta Esmeralda (`Sector Crítico`)**: Alta velocidad orbital (`2.65`–`2.85 rad/s`), zonas de captura exigentes (`64`–`68 u`) y 5 asteroides custodiando el ascenso a la Cúpula Zenith.
+### Progresión de sectores (Dificultad y música adaptativa)
+Cada partida recorre **3 sectores diseñados a mano** (`CAMPAIGN_STAGES`), acompañados por un secuenciador electrónico espacial que incrementa su ritmo (BPM) y tensión armónica en cada sector:
+1. **Sector 1 — Corredor Orbital Alfa (`Calentamiento` · `118 BPM`)**: Zonas de captura amplias (`72`–`80 u`), velocidades orbitales moderadas (`2.1`–`2.3 rad/s`) y 3 asteroides estáticos.
+2. **Sector 2 — Cinturón de Cobalto (`Riesgo Medio` · `126 BPM`)**: Órbitas más ágiles (`2.4`–`2.6 rad/s`), radios de captura intermedios (`68`–`72 u`), inversión de giro inicial y 4 asteroides en la diagonal principal.
+3. **Sector 3 — Tormenta Esmeralda (`Sector Crítico` · `134 BPM`)**: Alta velocidad orbital (`2.65`–`2.85 rad/s`), zonas de captura exigentes (`64`–`68 u`) y 5 asteroides custodiando el ascenso a la Cúpula Zenith.
 
 Al completar la entrega de un sector, avanzás automáticamente al siguiente corredor y recibís **`+12 s`** de tiempo extra (con tope estricto en `90 s`).
+
+---
+
+## Dirección artística y sonora (Estilo *Axiom Verge*)
+
+- **Sprites Pixel-Art procedimentales con tramado Bayer (`src/render/pixelArtGenerator.ts`)**: Los planetas y asteroides se pre-renderizan en lienzos *offscreen* de baja resolución (`28×28` y `20×20` px) con `imageSmoothingEnabled = false`, matriz de *dithering* Bayer 4×4, estrías orgánicas y poros luminosos.
+- **Atmósfera CRT y glitch biomecánico**: Grilla táctica, conductos laterales, *scanlines* horizontales y desplazamiento de glitch cromático durante la recuperación tras un impacto (respetando `prefers-reduced-motion: reduce`).
+- **Sintetizador electrónico espacial (`src/audio/spaceMusic.ts` y `src/audio/soundEffects.ts`)**: Secuenciador de 16 pasos con *lookahead* sobre `Web Audio API` (bajo `sawtooth` con filtro pasa-bajos resonante, arpegio `square` con eco en modo frigio/menor armónico, bombo electrónico y *hi-hat* de ruido blanco filtrado).
 
 ---
 
@@ -57,8 +65,6 @@ Definidas en [`src/config/gameConfig.ts`](./src/config/gameConfig.ts) e implemen
 
 ## Arquitectura del proyecto
 
-Diseño desacoplado en TypeScript sin motores pesados ni frameworks de interfaz:
-
 ```text
 orbita-express/
 ├── index.html                  # Estructura semántica, Canvas y modales accesibles (Inicio, Pausa, Resultado)
@@ -76,28 +82,17 @@ orbita-express/
 │   ├── input/
 │   │   └── inputController.ts  # Pointer Events unificados + teclado + auto-pausa por visibilidad
 │   ├── render/
-│   │   └── canvasRenderer.ts   # Renderizado vectorial en coordenadas lógicas (540×960) con DPR acotado
+│   │   ├── pixelArtGenerator.ts# Generador de texturas pixel-art con tramado Bayer 4x4
+│   │   └── canvasRenderer.ts   # Renderizado pixel-art CRT en coordenadas lógicas (540×960)
 │   ├── ui/
 │   │   ├── hud.ts              # Sincronización del HUD, indicador de sector, modales y foco de teclado
-│   │   └── styles.css          # Diseño adaptable desde 360 px, touch-action local y reduced-motion
+│   │   └── styles.css          # Terminal retro adaptable desde 360 px y reduced-motion
 │   ├── audio/
-│   │   └── soundEffects.ts     # Efectos sintetizados con Web Audio API (sin assets externos)
+│   │   ├── spaceMusic.ts       # Escalas, secuencias MIDI y BPM por sector
+│   │   └── soundEffects.ts     # Secuenciador de música electrónica y efectos con Web Audio API
 │   └── storage/
 │       └── storage.ts          # Persistencia local versionada y validada (orbita_express_save_v1)
 └── tests/
-    ├── unit/                   # 23 pruebas deterministas en Vitest (geometría, campaña, puntos, storage)
+    ├── unit/                   # 24 pruebas deterministas en Vitest (geometría, campaña, puntos, música, storage)
     └── e2e/                    # Pruebas de navegador en Playwright (escritorio + móvil 360×640)
 ```
-
----
-
-## Comandos disponibles
-
-| Comando | Descripción |
-| :--- | :--- |
-| `npm run dev` | Levanta Vite en `http://127.0.0.1:5173` (solo loopback). |
-| `npm run typecheck` | Ejecuta `tsc --noEmit` en modo estricto. |
-| `npm test` | Ejecuta las 23 pruebas unitarias deterministas con Vitest. |
-| `npm run build` | Compila el paquete estático de producción en `dist/`. |
-| `npm run preview` | Sirve el build de producción en `http://127.0.0.1:4173`. |
-| `npm run test:e2e` | Ejecuta las pruebas E2E de Playwright en Chromium escritorio y móvil (`360×640`). |
