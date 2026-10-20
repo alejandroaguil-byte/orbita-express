@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import {
+  getSectorMusicTheme,
+  getSixteenthNoteDuration,
+  midiToFrequency,
+} from '../../src/audio/spaceMusic';
 import { GAME_CONFIG } from '../../src/config/gameConfig';
 import { calculateDeliveryPoints, calculateTimeBonus } from '../../src/core/scoring';
 import {
@@ -110,5 +115,22 @@ describe('Persistencia local versionada y segura (storage)', () => {
       audioMuted: false,
     });
     expect(savePersistedData({ highScore: 500, audioMuted: false }, mem)).toBe(false);
+  });
+});
+
+describe('Sintetizador de música espacial (spaceMusic)', () => {
+  it('convierte notas MIDI a frecuencias exactas en Hz y escala el BPM por sector', () => {
+    expect(midiToFrequency(69)).toBeCloseTo(440, 4);
+    expect(midiToFrequency(57)).toBeCloseTo(220, 4);
+
+    const s1 = getSectorMusicTheme(1);
+    const s2 = getSectorMusicTheme(2);
+    const s3 = getSectorMusicTheme(3);
+
+    expect(s1.bpm).toBeLessThan(s2.bpm);
+    expect(s2.bpm).toBeLessThan(s3.bpm);
+    expect(s1.bassSequence).toHaveLength(16);
+    expect(s1.arpSequence).toHaveLength(16);
+    expect(getSixteenthNoteDuration(120)).toBeCloseTo(0.125, 5);
   });
 });
