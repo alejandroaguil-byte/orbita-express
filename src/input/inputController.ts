@@ -4,7 +4,7 @@ export type InputCommandHandler = (command: InputCommand) => void;
 
 /**
  * Controlador unificado de entrada mediante Pointer Events y teclado.
- * Gestiona captura de puntero, cancelación segura y pérdida de foco/visibilidad.
+ * Gestiona captura de puntero, cancelación segura, Dash en vuelo y atajos de armería.
  */
 export class InputController {
   private readonly surface: HTMLElement;
@@ -80,7 +80,6 @@ export class InputController {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.code === 'Space') {
-      // Permitir que los botones de menú con foco se activen normalmente con Espacio
       if (this.isInteractiveControlTarget(event.target)) {
         return;
       }
@@ -90,6 +89,31 @@ export class InputController {
       }
       this.isSpaceAiming = true;
       this.onCommand({ type: 'AIM_START' });
+      return;
+    }
+
+    if ((event.code === 'KeyD' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') && !event.repeat) {
+      if (this.isInteractiveControlTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      this.onCommand({ type: 'FLIGHT_DASH' });
+      return;
+    }
+
+    if (event.code === 'Digit1' && !event.repeat) {
+      if (this.isInteractiveControlTarget(event.target)) {
+        return;
+      }
+      this.onCommand({ type: 'SELECT_SECTOR_UPGRADE', upgradeId: 'SHIELD_OVERCHARGE' });
+      return;
+    }
+
+    if (event.code === 'Digit2' && !event.repeat) {
+      if (this.isInteractiveControlTarget(event.target)) {
+        return;
+      }
+      this.onCommand({ type: 'SELECT_SECTOR_UPGRADE', upgradeId: 'MAGNETAR_CHRONO' });
       return;
     }
 

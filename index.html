@@ -42,6 +42,14 @@
           <button
             type="button"
             class="hud-btn"
+            id="btn-flight-dash"
+            title="Activar Micro-Impulso en vuelo (Tecla D / Shift)"
+          >
+            Dash (D)
+          </button>
+          <button
+            type="button"
+            class="hud-btn"
             id="btn-flip-orbit"
             title="Invertir sentido de giro orbital (Tecla R)"
           >
@@ -66,6 +74,24 @@
         </div>
       </header>
 
+      <!-- Barra táctica de Armería Biomecánica al avanzar de sector -->
+      <aside
+        class="armory-bar"
+        id="armory-bar"
+        aria-label="Selector de módulo de Armería Biomecánica"
+        hidden
+      >
+        <span class="armory-title">⚡ Armería de Sector · Elegí módulo:</span>
+        <div class="armory-actions">
+          <button type="button" class="hud-btn hud-btn--armory" id="btn-upgrade-shield">
+            [1] Escudo + 6s
+          </button>
+          <button type="button" class="hud-btn hud-btn--armory" id="btn-upgrade-magnetar">
+            [2] Magnetar + Crono
+          </button>
+        </div>
+      </aside>
+
       <div class="game-stage-container" id="stage-container">
         <canvas
           id="game-canvas"
@@ -81,7 +107,7 @@
         <p class="hud-keyboard-hint">
           <span id="hud-sector-name">Corredor Orbital Alfa</span> · Destino:
           <strong id="hud-target-name">Faro Ámbar</strong> · <strong>Espacio</strong> saltar ·
-          <strong>R</strong> giro · <strong>P</strong> pausar
+          <strong>D</strong> dash · <strong>R</strong> giro · <strong>P</strong> pausar
         </p>
       </footer>
 
@@ -98,8 +124,8 @@
           <span class="modal-eyebrow">Servicio Postal Interplanetario</span>
           <h1 class="modal-title" id="start-title">Órbita Express</h1>
           <p class="modal-text">
-            Superá <strong>3 sectores</strong> con mecánicas únicas, recolectá cápsulas biomecánicas
-            y evolucioná tu nave de <strong>MK-I a MK-III</strong> antes de que termine el reloj.
+            Superá <strong>3 sectores</strong> con mecánicas únicas, clavá capturas perfectas,
+            usá el <strong>Dash en vuelo</strong> y evolucioná tu nave de <strong>MK-I a MK-III</strong>.
           </p>
           <p class="modal-instruction">
             Mantené presionado para ver la dirección. Soltá para saltar.

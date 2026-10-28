@@ -21,6 +21,11 @@ export class HudOverlay {
   private readonly shipStatusEl: HTMLElement;
   private readonly helpBannerEl: HTMLElement;
 
+  private readonly armoryBarEl: HTMLElement;
+  private readonly upgradeShieldButtonEl: HTMLButtonElement;
+  private readonly upgradeMagnetarButtonEl: HTMLButtonElement;
+
+  private readonly flightDashButtonEl: HTMLButtonElement;
   private readonly flipOrbitButtonEl: HTMLButtonElement;
   private readonly muteButtonEl: HTMLButtonElement;
   private readonly pauseButtonEl: HTMLButtonElement;
@@ -62,6 +67,20 @@ export class HudOverlay {
     this.shipStatusEl = this.requireElement(root, '#hud-ship-status');
     this.helpBannerEl = this.requireElement(root, '#hud-help-banner');
 
+    this.armoryBarEl = this.requireElement(root, '#armory-bar');
+    this.upgradeShieldButtonEl = this.requireElement(
+      root,
+      '#btn-upgrade-shield',
+    ) as HTMLButtonElement;
+    this.upgradeMagnetarButtonEl = this.requireElement(
+      root,
+      '#btn-upgrade-magnetar',
+    ) as HTMLButtonElement;
+
+    this.flightDashButtonEl = this.requireElement(
+      root,
+      '#btn-flight-dash',
+    ) as HTMLButtonElement;
     this.flipOrbitButtonEl = this.requireElement(root, '#btn-flip-orbit') as HTMLButtonElement;
     this.muteButtonEl = this.requireElement(root, '#btn-mute') as HTMLButtonElement;
     this.pauseButtonEl = this.requireElement(root, '#btn-pause') as HTMLButtonElement;
@@ -114,8 +133,29 @@ export class HudOverlay {
   }
 
   private bindButtons(): void {
+    this.flightDashButtonEl.addEventListener('click', () => {
+      this.callbacks.onCommand({ type: 'FLIGHT_DASH' });
+      this.focusGameSurface();
+    });
+
     this.flipOrbitButtonEl.addEventListener('click', () => {
       this.callbacks.onCommand({ type: 'FLIP_ORBIT' });
+      this.focusGameSurface();
+    });
+
+    this.upgradeShieldButtonEl.addEventListener('click', () => {
+      this.callbacks.onCommand({
+        type: 'SELECT_SECTOR_UPGRADE',
+        upgradeId: 'SHIELD_OVERCHARGE',
+      });
+      this.focusGameSurface();
+    });
+
+    this.upgradeMagnetarButtonEl.addEventListener('click', () => {
+      this.callbacks.onCommand({
+        type: 'SELECT_SECTOR_UPGRADE',
+        upgradeId: 'MAGNETAR_CHRONO',
+      });
       this.focusGameSurface();
     });
 
@@ -225,6 +265,13 @@ export class HudOverlay {
       snapshot.appState !== 'PLAYING' && snapshot.appState !== 'PAUSED';
     this.flipOrbitButtonEl.disabled =
       snapshot.appState !== 'PLAYING' || snapshot.ship.mode !== 'ORBITING';
+    this.flightDashButtonEl.disabled =
+      snapshot.appState !== 'PLAYING' ||
+      snapshot.ship.mode !== 'FLYING' ||
+      !snapshot.ship.dashAvailableThisFlight;
+
+    this.armoryBarEl.hidden =
+      snapshot.appState !== 'PLAYING' || !snapshot.armoryChoiceAvailable;
 
     this.startHighScoreEl.textContent = `${snapshot.highScore}`;
 
@@ -239,7 +286,7 @@ export class HudOverlay {
         ? '¡Reparto exitoso!'
         : 'Se acabó el tiempo';
       this.resultSubtitleEl.textContent = won
-        ? `Superaste los ${snapshot.totalSectors} sectores con nave ${this.formatTierRoman(snapshot.ship.tier)} y ${snapshot.remainingTime.toFixed(1)}s de margen.`
+        ? `Superaste los ${snapshot.totalSectors} sectores con nave ${this.formatTierRoman(snapshot.ship.tier)} (${snapshot.perfectCapturesCount} capturas perfectas) y ${snapshot.remainingTime.toFixed(1)}s de margen.`
         : `Alcanzaste el Sector ${snapshot.currentSectorNumber}/${snapshot.totalSectors} (${snapshot.deliveriesCompleted}/${snapshot.totalDeliveriesGoal} entregas).`;
       this.resultDeliveriesEl.textContent = `${snapshot.deliveriesCompleted} / ${snapshot.totalDeliveriesGoal}`;
       this.resultScoreEl.textContent = `${snapshot.score}`;

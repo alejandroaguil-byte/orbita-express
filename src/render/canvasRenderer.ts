@@ -3,10 +3,12 @@ import {
   AsteroidRuntimeState,
   BoostGateDefinition,
   DeliveryEffectState,
+  FloatingPopupState,
   GameSnapshot,
   GravityWellDefinition,
   PlanetDefinition,
   PowerUpOrbRuntimeState,
+  SimulationEvent,
   WormholePairDefinition,
 } from '../types/game';
 import {
@@ -28,6 +30,17 @@ interface NebulaBand {
   readonly color: string;
 }
 
+interface PixelParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -35,6 +48,10 @@ export class CanvasRenderer {
   private readonly nebulaBands: readonly NebulaBand[];
   private readonly planetSprites = new Map<string, HTMLCanvasElement>();
   private readonly asteroidSprites = new Map<string, HTMLCanvasElement>();
+  private particles: PixelParticle[] = [];
+  private shakeTimer = 0;
+  private shakeIntensity = 0;
+  private lastRenderElapsedTime = 0;
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
@@ -86,6 +103,110 @@ export class CanvasRenderer {
     ];
   }
 
+  public handleSimulationEvents(events: readonly SimulationEvent[]): void {
+    if (this.reducedMotion || events.length === 0) {
+      return;
+    }
+
+    for (const ev of events) {
+      if (ev.type === 'GAME_STARTED') {
+        this.particles = [];
+        this.shakeTimer = 0;
+        continue;
+      }
+
+      const pos = ev.position;
+      if (!pos) continue;
+
+      switch (ev.type) {
+        case 'PERFECT_CAPTURE':
+          this.spawnParticleBurst(pos.x, pos.y, 18, ['#fde047', '#fef08a', '#2dd4bf'], 150);
+          this.triggerShake(0.14, 3);
+          break;
+        case 'DELIVERY_COMPLETED':
+          this.spawnParticleBurst(pos.x, pos.y, 22, ['#34d399', '#2dd4bf', '#fde047'], 165);
+          this.triggerShake(0.18, 4);
+          break;
+        case 'SHIELD_ABSORBED_HIT':
+          this.spawnParticleBurst(pos.x, pos.y, 24, ['#38bdf8', '#fb7185', '#fde047'], 190);
+          this.triggerShake(0.22, 5);
+          break;
+        case 'BOOST_GATE_PASSED':
+          this.spawnParticleBurst(pos.x, pos.y, 14, ['#2dd4bf', '#fde047'], 135);
+          this.triggerShake(0.1, 2.5);
+          break;
+        case 'POWERUP_COLLECTED':
+          this.spawnParticleBurst(pos.x, pos.y, 16, ['#c084fc', '#38bdf8', '#fde047'], 130);
+          break;
+        case 'WORMHOLE_TRAVERSED':
+          this.spawnParticleBurst(pos.x, pos.y, 20, ['#c084fc', '#2dd4bf', '#f8fafc'], 160);
+          this.triggerShake(0.15, 3.5);
+          break;
+        case 'SHIP_DASHED':
+          this.spawnParticleBurst(pos.x, pos.y, 12, ['#38bdf8', '#fde047'], 120);
+          break;
+        case 'SHIP_ASTEROID_HIT':
+        case 'SHIP_OUT_OF_BOUNDS':
+          this.spawnParticleBurst(pos.x, pos.y, 20, ['#f43f5e', '#fb923c', '#fde047'], 170);
+          this.triggerShake(0.25, 6);
+          break;
+      }
+    }
+  }
+
+  private triggerShake(duration: number, intensity: number): void {
+    this.shakeTimer = Math.max(this.shakeTimer, duration);
+    this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
+  }
+
+  private spawnParticleBurst(
+    cx: number,
+    cy: number,
+    count: number,
+    palette: readonly string[],
+    maxSpeed: number,
+  ): void {
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + (i % 3) * 0.18;
+      const speed = maxSpeed * (0.45 + ((i * 7) % 10) / 18);
+      const life = 0.35 + ((i * 3) % 5) * 0.08;
+      this.particles.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: i % 2 === 0 ? 4 : 3,
+        color: palette[i % palette.length],
+        life,
+        maxLife: life,
+      });
+    }
+    if (this.particles.length > 120) {
+      this.particles = this.particles.slice(this.particles.length - 120);
+    }
+  }
+
+  private stepVisualEffects(elapsedTime: number): void {
+    const dt = Math.max(0, Math.min(0.05, elapsedTime - this.lastRenderElapsedTime));
+    this.lastRenderElapsedTime = elapsedTime;
+    if (dt <= 0) return;
+
+    if (this.shakeTimer > 0) {
+      this.shakeTimer = Math.max(0, this.shakeTimer - dt);
+    }
+
+    if (this.particles.length > 0) {
+      for (const p of this.particles) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vx *= 0.94;
+        p.vy *= 0.94;
+        p.life -= dt;
+      }
+      this.particles = this.particles.filter((p) => p.life > 0);
+    }
+  }
+
   private getPlanetSprite(planet: PlanetDefinition): HTMLCanvasElement | null {
     const key = `${planet.id}:${planet.color}:${planet.accentColor}`;
     const cached = this.planetSprites.get(key);
@@ -128,6 +249,8 @@ export class CanvasRenderer {
   }
 
   public render(snapshot: GameSnapshot): void {
+    this.stepVisualEffects(snapshot.elapsedTime);
+
     const { ctx, dpr, scale, offsetX, offsetY } = this;
     const cssWidth = this.canvas.width / dpr;
     const cssHeight = this.canvas.height / dpr;
@@ -136,53 +259,50 @@ export class CanvasRenderer {
     ctx.scale(dpr, dpr);
     ctx.imageSmoothingEnabled = false;
 
-    // Fondo exterior oscuro (vacío CRT)
     ctx.fillStyle = '#040208';
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-    // Transformación al espacio de coordenadas lógicas (540 x 960)
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    // Desplazamiento breve de glitch horizontal si la nave está recuperándose de un impacto
-    if (!this.reducedMotion && snapshot.ship.mode === 'RECOVERING') {
-      const glitchOffset = Math.round(Math.sin(snapshot.elapsedTime * 60) * 4);
-      ctx.translate(glitchOffset, 0);
+    if (!this.reducedMotion) {
+      if (snapshot.ship.mode === 'RECOVERING') {
+        const glitchOffset = Math.round(Math.sin(snapshot.elapsedTime * 60) * 4);
+        ctx.translate(glitchOffset, 0);
+      } else if (this.shakeTimer > 0) {
+        const shakeX = Math.round(Math.sin(snapshot.elapsedTime * 90) * this.shakeIntensity);
+        const shakeY = Math.round(Math.cos(snapshot.elapsedTime * 75) * this.shakeIntensity);
+        ctx.translate(shakeX, shakeY);
+      }
     }
 
     this.drawStageBackground(snapshot);
 
-    // 1. Pozos gravitacionales (Sector 3+)
     for (const well of snapshot.stage.gravityWells ?? []) {
       this.drawGravityWell(well, snapshot.elapsedTime);
     }
 
-    // 2. Portales Wormhole (Sector 3+)
     for (const wormhole of snapshot.stage.wormholes ?? []) {
       this.drawWormhole(wormhole, snapshot.elapsedTime);
     }
 
-    // 3. Anillos de impulso (Boost Gates)
     for (const gate of snapshot.stage.boostGates ?? []) {
       const isActivated = snapshot.activatedGateIds.includes(gate.id);
       this.drawBoostGate(gate, isActivated, snapshot.elapsedTime);
     }
 
-    // 4. Cápsulas recolectables de poder (Power-Up Orbs)
     for (const orb of snapshot.activePowerUpOrbs) {
       if (!orb.collected) {
         this.drawPowerUpOrb(orb, snapshot.elapsedTime);
       }
     }
 
-    // 5. Asteroides (estáticos y patrullas móviles)
     for (const asteroid of snapshot.activeAsteroids) {
       if (!asteroid.destroyed) {
         this.drawAsteroid(asteroid, snapshot.elapsedTime);
       }
     }
 
-    // 6. Planetas y zonas de captura
     const magnetarBonus =
       snapshot.ship.powers.magnetarTimer > 0 ? GAME_CONFIG.magnetarCaptureRadiusBonus : 0;
     for (const planet of snapshot.stage.planets) {
@@ -207,10 +327,50 @@ export class CanvasRenderer {
       this.drawAimGuide(snapshot);
     }
 
+    this.drawParticles();
     this.drawShipTrail(snapshot);
     this.drawShip(snapshot);
+    this.drawFloatingPopups(snapshot.floatingPopups);
     this.drawCrtScanlines(snapshot);
 
+    ctx.restore();
+  }
+
+  private drawParticles(): void {
+    if (this.reducedMotion || this.particles.length === 0) return;
+    const { ctx } = this;
+    ctx.save();
+    for (const p of this.particles) {
+      const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x - p.size / 2), Math.round(p.y - p.size / 2), p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  private drawFloatingPopups(popups: readonly FloatingPopupState[]): void {
+    if (popups.length === 0) return;
+    const { ctx } = this;
+    ctx.save();
+    ctx.font = '700 11px "Courier New", Courier, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const popup of popups) {
+      const alpha = Math.max(0, Math.min(1, popup.timer / popup.duration));
+      const x = Math.round(popup.position.x);
+      const y = Math.round(popup.position.y);
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#040208';
+      ctx.fillText(popup.text, x + 1, y + 1);
+      ctx.fillStyle = popup.color;
+      ctx.fillText(popup.text, x, y);
+    }
+
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -285,7 +445,6 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(x, y);
 
-    // Anillos concéntricos de atracción gravitacional
     ctx.beginPath();
     ctx.arc(0, 0, well.influenceRadius, 0, Math.PI * 2);
     ctx.setLineDash([4, 6]);
@@ -301,7 +460,6 @@ export class CanvasRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Partículas orbitales de acreción
     const spin = this.reducedMotion ? 0 : elapsedTime * 2.5;
     for (let i = 0; i < 6; i += 1) {
       const a = spin + (i * Math.PI) / 3;
@@ -312,7 +470,6 @@ export class CanvasRenderer {
       ctx.fillRect(px - 2, py - 2, 4, 4);
     }
 
-    // Núcleo oscuro de singularidad
     ctx.beginPath();
     ctx.arc(0, 0, well.coreRadius, 0, Math.PI * 2);
     ctx.fillStyle = '#05020a';
@@ -339,7 +496,6 @@ export class CanvasRenderer {
 
     ctx.save();
 
-    // Línea de enlace cuántico entre entrada y salida
     ctx.beginPath();
     ctx.moveTo(ex, ey);
     ctx.lineTo(ox, oy);
@@ -395,7 +551,6 @@ export class CanvasRenderer {
     ctx.translate(x, y);
     ctx.rotate(gate.angle);
 
-    // Anillo exterior del portal de impulso
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.setLineDash([5, 3]);
@@ -408,12 +563,10 @@ export class CanvasRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Pilones laterales pixel-art
     ctx.fillStyle = '#fde047';
     ctx.fillRect(-4, -r - 2, 8, 5);
     ctx.fillRect(-4, r - 3, 8, 5);
 
-    // Chevrones de aceleración en el centro
     const shift = this.reducedMotion ? 0 : Math.round(Math.sin(elapsedTime * 8) * 2);
     ctx.strokeStyle = '#fde047';
     ctx.lineWidth = 2;
@@ -448,7 +601,6 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(x, y + bob);
 
-    // Rombo energético pixel-art
     ctx.beginPath();
     ctx.moveTo(0, -orb.radius);
     ctx.lineTo(orb.radius, 0);
@@ -461,7 +613,6 @@ export class CanvasRenderer {
     ctx.strokeStyle = color;
     ctx.stroke();
 
-    // Núcleo brillante cuadrado
     ctx.fillStyle = color;
     ctx.fillRect(-4, -4, 8, 8);
 
@@ -481,7 +632,6 @@ export class CanvasRenderer {
 
     ctx.save();
 
-    // Si es un asteroide patrulla móvil, mostrar marcador de patrulla desde su posición base
     if (asteroid.isMoving) {
       ctx.beginPath();
       ctx.moveTo(Math.round(asteroid.basePosition.x), Math.round(asteroid.basePosition.y));
@@ -541,7 +691,6 @@ export class CanvasRenderer {
 
     ctx.save();
 
-    // 1. Zona de captura (captureRadius + magnetarBonus) con estética de escáner retro
     ctx.beginPath();
     ctx.arc(x, y, effectiveCaptureRadius, 0, Math.PI * 2);
     ctx.setLineDash(isTarget ? [6, 4] : [3, 6]);
@@ -563,7 +712,6 @@ export class CanvasRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 2. Anillo orbital nominal (orbitRadius)
     ctx.beginPath();
     ctx.arc(x, y, planet.orbitRadius, 0, Math.PI * 2);
     ctx.strokeStyle = isCurrentOrbit
@@ -572,7 +720,6 @@ export class CanvasRenderer {
     ctx.lineWidth = isCurrentOrbit ? 2 : 1;
     ctx.stroke();
 
-    // 3. Mira cuadrada pixel-art de DESTINO
     if (isTarget) {
       const boxHalf = effectiveCaptureRadius + 6 + pulse;
       const cornerLen = 14;
@@ -606,7 +753,6 @@ export class CanvasRenderer {
       ctx.fillText('★ DESTINO', x, badgeY + 2);
     }
 
-    // 4. Cuerpo del planeta en Pixel-Art con tramado Bayer
     const r = planet.visualRadius;
     const sprite = this.getPlanetSprite(planet);
     if (sprite) {
@@ -660,32 +806,32 @@ export class CanvasRenderer {
 
   private drawAimGuide(snapshot: GameSnapshot): void {
     const { ctx } = this;
-    const { origin, endPoint, direction } = snapshot.aimGuide;
-    const hasChronoAim = snapshot.ship.powers.chronoAimTimer > 0;
+    const { points, endPoint, direction } = snapshot.aimGuide;
 
     ctx.save();
 
-    const steps = hasChronoAim ? 16 : 12;
-    for (let i = 1; i <= steps; i += 1) {
-      const t = i / steps;
-      const px = Math.round(origin.x + (endPoint.x - origin.x) * t);
-      const py = Math.round(origin.y + (endPoint.y - origin.y) * t);
-      const box = i === steps ? 6 : 4;
+    // Renderizar cada nodo muestreado de la trayectoria (incluye curvatura por gravedad)
+    for (let i = 1; i < points.length; i += 1) {
+      const pt = points[i];
+      const px = Math.round(pt.x);
+      const py = Math.round(pt.y);
+      const box = i === points.length - 1 ? 6 : 4;
       ctx.fillStyle = i % 2 === 0 ? '#2dd4bf' : '#fde047';
       ctx.fillRect(px - box / 2, py - box / 2, box, box);
     }
 
     const headLen = 11;
-    const angle = Math.atan2(direction.y, direction.x);
+    const prevPt = points.length >= 2 ? points[points.length - 2] : snapshot.aimGuide.origin;
+    const tipAngle = Math.atan2(endPoint.y - prevPt.y || direction.y, endPoint.x - prevPt.x || direction.x);
     ctx.beginPath();
     ctx.moveTo(endPoint.x, endPoint.y);
     ctx.lineTo(
-      endPoint.x - headLen * Math.cos(angle - Math.PI / 6),
-      endPoint.y - headLen * Math.sin(angle - Math.PI / 6),
+      endPoint.x - headLen * Math.cos(tipAngle - Math.PI / 6),
+      endPoint.y - headLen * Math.sin(tipAngle - Math.PI / 6),
     );
     ctx.lineTo(
-      endPoint.x - headLen * Math.cos(angle + Math.PI / 6),
-      endPoint.y - headLen * Math.sin(angle + Math.PI / 6),
+      endPoint.x - headLen * Math.cos(tipAngle + Math.PI / 6),
+      endPoint.y - headLen * Math.sin(tipAngle + Math.PI / 6),
     );
     ctx.closePath();
     ctx.fillStyle = '#fde047';
@@ -725,7 +871,6 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(Math.round(ship.position.x), Math.round(ship.position.y));
 
-    // Escudo de Fase activo alrededor de la nave
     if (ship.powers.phaseShield) {
       ctx.beginPath();
       ctx.arc(0, 0, 17, 0, Math.PI * 2);
@@ -736,7 +881,6 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Ondas de Pulso Magnetar activo
     if (ship.powers.magnetarTimer > 0) {
       ctx.strokeStyle = 'rgba(192, 132, 252, 0.8)';
       ctx.lineWidth = 1.5;
@@ -753,7 +897,6 @@ export class CanvasRenderer {
 
     ctx.rotate(ship.headingAngle);
 
-    // Evolución de alerones biomecánicos según el nivel (MK-II y MK-III)
     if (ship.tier >= 2) {
       ctx.fillStyle = ship.tier >= 3 ? '#fde047' : '#38bdf8';
       ctx.fillRect(-7, -12, 8, 3);
@@ -764,7 +907,6 @@ export class CanvasRenderer {
       ctx.fillRect(-12, -6, 4, 12);
     }
 
-    // Chasis principal de la nave biomecánica estilo 16-bits
     ctx.beginPath();
     ctx.moveTo(14 + (ship.tier - 1) * 2, 0);
     ctx.lineTo(-8, -9);
@@ -785,7 +927,6 @@ export class CanvasRenderer {
           : '#2dd4bf';
     ctx.stroke();
 
-    // Cabina / núcleo energético de la nave
     ctx.fillStyle = ship.tier >= 2 ? '#38bdf8' : '#f43f5e';
     ctx.fillRect(-2, -2, 5, 4);
 
