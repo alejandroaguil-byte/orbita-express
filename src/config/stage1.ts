@@ -3,13 +3,14 @@ import { GAME_CONFIG } from './gameConfig';
 
 /**
  * Sector 1 (Fácil / Calentamiento): "Corredor Orbital Alfa".
- * Zonas de captura generosas (72-80 u) y velocidades orbitales moderadas (2.1-2.4 rad/s).
+ * Escenario con Anillos de Impulso (Boost Gates) y cápsulas biomecánicas iniciales.
  */
 export const STAGE_1: StageDefinition = {
   id: 'stage-1-corredor-alfa',
   name: 'Corredor Orbital Alfa',
   sectorNumber: 1,
   difficultyLabel: 'Calentamiento',
+  mechanicSummary: 'Anillos de Impulso + Cápsulas de Poder',
   deliveriesRequired: 1,
   worldWidth: GAME_CONFIG.worldWidth,
   worldHeight: GAME_CONFIG.worldHeight,
@@ -91,18 +92,50 @@ export const STAGE_1: StageDefinition = {
       radius: 19,
     },
   ],
+  boostGates: [
+    {
+      id: 'gate-s1-west',
+      position: { x: 205, y: 715 },
+      radius: 26,
+      angle: -Math.PI * 0.72,
+      speedMultiplier: 1.38,
+      bonusPoints: 75,
+    },
+    {
+      id: 'gate-s1-north',
+      position: { x: 280, y: 445 },
+      radius: 26,
+      angle: -Math.PI * 0.75,
+      speedMultiplier: 1.38,
+      bonusPoints: 75,
+    },
+  ],
+  powerUpOrbs: [
+    {
+      id: 'orb-s1-shield',
+      position: { x: 235, y: 505 },
+      radius: 16,
+      power: 'PHASE_SHIELD',
+    },
+    {
+      id: 'orb-s1-chrono',
+      position: { x: 245, y: 260 },
+      radius: 16,
+      power: 'CHRONO_AIM',
+    },
+  ],
 };
 
 /**
  * Sector 2 (Riesgo Medio): "Cinturón de Cobalto".
- * Órbitas más ágiles (2.4-2.65 rad/s), radios de captura intermedios (66-72 u)
- * y 4 asteroides custodiando el paso diagonal hacia el norte.
+ * Introduce asteroides patrulla móviles con trayectorias oscilatorias deterministas.
  */
 export const STAGE_2: StageDefinition = {
   id: 'stage-2-cinturon-cobalto',
   name: 'Cinturón de Cobalto',
   sectorNumber: 2,
   difficultyLabel: 'Riesgo Medio',
+  mechanicSummary: 'Patrullas de Asteroides Móviles + Enfoque Crono',
   deliveriesRequired: 1,
   worldWidth: GAME_CONFIG.worldWidth,
   worldHeight: GAME_CONFIG.worldHeight,
@@ -175,32 +208,65 @@ export const STAGE_2: StageDefinition = {
     },
     {
       id: 's2-ast-2',
-      position: { x: 245, y: 455 },
+      position: { x: 225, y: 445 },
       radius: 21,
+      patrolOffset: { x: 24, y: 10 },
+      patrolSpeed: 2.1,
+      patrolPhase: 0,
     },
     {
       id: 's2-ast-3',
-      position: { x: 430, y: 500 },
+      position: { x: 435, y: 500 },
       radius: 20,
+      patrolOffset: { x: 0, y: 24 },
+      patrolSpeed: 2.4,
+      patrolPhase: 1.2,
     },
     {
       id: 's2-ast-4',
       position: { x: 315, y: 230 },
       radius: 20,
+      patrolOffset: { x: 28, y: 0 },
+      patrolSpeed: 2.2,
+      patrolPhase: 0.6,
+    },
+  ],
+  boostGates: [
+    {
+      id: 'gate-s2-belt',
+      position: { x: 160, y: 675 },
+      radius: 25,
+      angle: -Math.PI / 2,
+      speedMultiplier: 1.38,
+      bonusPoints: 75,
+    },
+  ],
+  powerUpOrbs: [
+    {
+      id: 'orb-s2-magnetar',
+      position: { x: 230, y: 565 },
+      radius: 16,
+      power: 'MAGNETAR',
+    },
+    {
+      id: 'orb-s2-shield',
+      position: { x: 295, y: 350 },
+      radius: 16,
+      power: 'PHASE_SHIELD',
     },
   ],
 };
 
 /**
  * Sector 3 (Clímax / Alta Velocidad): "Tormenta Esmeralda".
- * Mayor velocidad orbital (2.65-2.9 rad/s), radios de captura más exigentes (64-68 u)
- * y 5 asteroides en el corredor hacia la Cúpula Zenith.
+ * Introduce Singularidad Gravitacional y Portal Wormhole de atajo cuántico.
  */
 export const STAGE_3: StageDefinition = {
   id: 'stage-3-tormenta-esmeralda',
   name: 'Tormenta Esmeralda',
   sectorNumber: 3,
   difficultyLabel: 'Sector Crítico',
+  mechanicSummary: 'Pozo Gravitacional + Portal Wormhole + Magnetar',
   deliveriesRequired: 1,
   worldWidth: GAME_CONFIG.worldWidth,
   worldHeight: GAME_CONFIG.worldHeight,
@@ -290,12 +356,59 @@ export const STAGE_3: StageDefinition = {
       id: 's3-ast-5',
       position: { x: 210, y: 180 },
       radius: 18,
+      patrolOffset: { x: 22, y: 10 },
+      patrolSpeed: 2.5,
+      patrolPhase: 0.4,
+    },
+  ],
+  boostGates: [
+    {
+      id: 'gate-s3-rush',
+      position: { x: 280, y: 555 },
+      radius: 25,
+      angle: -Math.PI * 0.25,
+      speedMultiplier: 1.4,
+      bonusPoints: 75,
+    },
+  ],
+  gravityWells: [
+    {
+      id: 'gw-s3-core',
+      name: 'Singularidad Esmeralda',
+      position: { x: 265, y: 245 },
+      influenceRadius: 64,
+      coreRadius: 15,
+      strength: 8500,
+    },
+  ],
+  wormholes: [
+    {
+      id: 'wh-s3-shortcut',
+      name: 'Portal Cuántico Zenith',
+      entryPosition: { x: 465, y: 700 },
+      exitPosition: { x: 425, y: 225 },
+      radius: 22,
+      color: '#c084fc',
+    },
+  ],
+  powerUpOrbs: [
+    {
+      id: 'orb-s3-chrono',
+      position: { x: 255, y: 710 },
+      radius: 16,
+      power: 'CHRONO_AIM',
+    },
+    {
+      id: 'orb-s3-magnetar',
+      position: { x: 275, y: 395 },
+      radius: 16,
+      power: 'MAGNETAR',
     },
   ],
 };
 
 /**
- * Campaña completa de 3 sectores con dificultad progresiva.
+ * Campaña completa de 3 sectores con dificultad y mecánicas progresivas.
  */
 export const CAMPAIGN_STAGES: readonly StageDefinition[] = [
   STAGE_1,

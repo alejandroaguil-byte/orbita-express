@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_CONFIG } from '../../src/config/gameConfig';
-import { CAMPAIGN_STAGES, STAGE_1 } from '../../src/config/stage1';
+import { CAMPAIGN_STAGES, STAGE_1, STAGE_2 } from '../../src/config/stage1';
 import { SimulationEngine } from '../../src/core/simulation';
 import { StageDefinition } from '../../src/types/game';
 
 describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores', () => {
-  it('inicia orbitando el planeta base con la guía de dirección desactivada', () => {
+  it('inicia orbitando el planeta base con la guía de dirección desactivada y nave MK-I', () => {
     const engine = new SimulationEngine(STAGE_1);
     const snap = engine.getSnapshot();
 
     expect(snap.appState).toBe('PLAYING');
     expect(snap.ship.mode).toBe('ORBITING');
+    expect(snap.ship.tier).toBe(1);
     expect(snap.ship.currentPlanetId).toBe('p-base');
     expect(snap.aimGuide.active).toBe(false);
     expect(snap.targetPlanetId).toBe(STAGE_1.targetSequence[0]);
@@ -416,7 +417,7 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(restarted.ship.currentPlanetId).toBe('p-base');
   });
 
-  it('progresa a través de los 3 sectores de CAMPAIGN_STAGES de forma resoluble y sin chocar con asteroides', () => {
+  it('progresa a través de los 3 sectores de CAMPAIGN_STAGES de forma resoluble, evolucionando la nave a MK-II y MK-III', () => {
     const engine = new SimulationEngine(CAMPAIGN_STAGES);
 
     const launchToPlanetInCurrentStage = (targetId: string): boolean => {
@@ -457,18 +458,23 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
       return false;
     };
 
-    // Sector 1: p-base -> p-relay-east (meta del Sector 1) -> avanza automáticamente al Sector 2
+    // Sector 1: p-base -> p-relay-east (meta del Sector 1) -> avanza automáticamente al Sector 2 con MK-II
     expect(engine.getSnapshot().currentSectorNumber).toBe(1);
+    expect(engine.getSnapshot().ship.tier).toBe(1);
     expect(launchToPlanetInCurrentStage('p-relay-east')).toBe(true);
     expect(engine.getSnapshot().deliveriesCompleted).toBe(1);
     expect(engine.getSnapshot().currentSectorNumber).toBe(2);
+    expect(engine.getSnapshot().ship.tier).toBe(2);
+    expect(engine.getSnapshot().ship.powers.phaseShield).toBe(true);
     expect(engine.getSnapshot().stage.id).toBe('stage-2-cinturon-cobalto');
 
-    // Sector 2: s2-base -> escala en s2-mid-center -> s2-high-east (meta del Sector 2) -> avanza al Sector 3
+    // Sector 2: s2-base -> escala en s2-mid-center -> s2-high-east (meta del Sector 2) -> avanza al Sector 3 con MK-III
     expect(launchToPlanetInCurrentStage('s2-mid-center')).toBe(true);
     expect(launchToPlanetInCurrentStage('s2-high-east')).toBe(true);
     expect(engine.getSnapshot().deliveriesCompleted).toBe(2);
     expect(engine.getSnapshot().currentSectorNumber).toBe(3);
+    expect(engine.getSnapshot().ship.tier).toBe(3);
+    expect(engine.getSnapshot().ship.powers.chronoAimTimer).toBeGreaterThan(0);
     expect(engine.getSnapshot().stage.id).toBe('stage-3-tormenta-esmeralda');
 
     // Sector 3: s3-base -> s3-step-west -> s3-step-east -> s3-zenith (meta del Sector 3)
@@ -483,5 +489,200 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(finalSnap.appState).toBe('RESULT');
     expect(finalSnap.gameOverReason).toBe('DELIVERIES_COMPLETED');
     expect(finalSnap.score).toBe(250 + 375 + 500 + finalSnap.timeBonusPoints);
+  });
+
+  it('invierte el sentido de giro orbital al ejecutar FLIP_ORBIT mientras orbita', () => {
+    const engine = new SimulationEngine(STAGE_1);
+    expect(engine.getSnapshot().ship.orbitDirection).toBe(1);
+
+    const events = engine.handleInput({ type: 'FLIP_ORBIT' });
+    expect(events.some((e) => e.type === 'ORBIT_INVERTED')).toBe(true);
+    expect(engine.getSnapshot().ship.orbitDirection).toBe(-1);
+
+    engine.handleInput({ type: 'FLIP_ORBIT' });
+    expect(engine.getSnapshot().ship.orbitDirection).toBe(1);
+  });
+
+  it('recolecta cápsulas de poder (PHASE_SHIELD, CHRONO_AIM, MAGNETAR), mejora el nivel de nave y absorbe el impacto de un asteroide sin perder el vuelo', () => {
+    const powerStage: StageDefinition = {
+      id: 'power-shield-test',
+      name: 'Laboratorio de Poderes',
+      sectorNumber: 1,
+      difficultyLabel: 'Test',
+      deliveriesRequired: 1,
+      worldWidth: 540,
+      worldHeight: 960,
+      startPlanetId: 'p1',
+      startOrbitAngle: 0,
+      startOrbitDirection: -1,
+      targetSequence: ['p2'],
+      planets: [
+        {
+          id: 'p1',
+          name: 'Origen',
+          position: { x: 270, y: 740 },
+          visualRadius: 24,
+          orbitRadius: 40,
+          captureRadius: 62,
+          angularSpeed: 2.0,
+          color: '#38bdf8',
+          accentColor: '#bae6fd',
+        },
+        {
+          id: 'p2',
+          name: 'Meta',
+          position: { x: 310, y: 260 },
+          visualRadius: 26,
+          orbitRadius: 44,
+          captureRadius: 72,
+          angularSpeed: 2.0,
+          color: '#fbbf24',
+          accentColor: '#fde68a',
+        },
+      ],
+      asteroids: [
+        {
+          id: 'ast-barrier',
+          position: { x: 310, y: 470 },
+          radius: 22,
+        },
+      ],
+      powerUpOrbs: [
+        {
+          id: 'orb-shield',
+          position: { x: 310, y: 610 },
+          radius: 18,
+          power: 'PHASE_SHIELD',
+        },
+      ],
+      boostGates: [
+        {
+          id: 'gate-1',
+          position: { x: 310, y: 550 },
+          radius: 24,
+          angle: -Math.PI / 2,
+          speedMultiplier: 1.4,
+          bonusPoints: 75,
+        },
+      ],
+    };
+
+    const engine = new SimulationEngine(powerStage);
+    engine.handleInput({ type: 'AIM_START' });
+    engine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
+
+    let collectedOrb = false;
+    let passedGate = false;
+    let shieldAbsorbed = false;
+
+    for (let i = 0; i < 60; i += 1) {
+      const ev = engine.step(GAME_CONFIG.fixedTimeStep);
+      if (ev.some((e) => e.type === 'POWERUP_COLLECTED')) collectedOrb = true;
+      if (ev.some((e) => e.type === 'BOOST_GATE_PASSED')) passedGate = true;
+      if (ev.some((e) => e.type === 'SHIELD_ABSORBED_HIT')) shieldAbsorbed = true;
+    }
+
+    const snap = engine.getSnapshot();
+    expect(collectedOrb).toBe(true);
+    expect(passedGate).toBe(true);
+    expect(shieldAbsorbed).toBe(true);
+    expect(snap.ship.tier).toBe(2);
+    expect(snap.ship.powers.phaseShield).toBe(false); // Consumido al pulverizar ast-barrier
+    expect(snap.ship.powers.magnetarTimer).toBeGreaterThan(0); // Otorgado por el Boost Gate
+    expect(snap.activeAsteroids.find((a) => a.id === 'ast-barrier')?.destroyed).toBe(true);
+    expect(snap.asteroidHitsCount).toBe(0);
+    expect(snap.deliveriesCompleted).toBe(1);
+    expect(snap.ship.mode).toBe('ORBITING');
+    expect(snap.ship.currentPlanetId).toBe('p2');
+  });
+
+  it('mueve asteroides patrulla de forma determinista y permite teletransporte por Wormhole y atracción de Pozo Gravitacional', () => {
+    const engineS2 = new SimulationEngine(STAGE_2);
+    const initialAstPos = engineS2
+      .getSnapshot()
+      .activeAsteroids.find((a) => a.id === 's2-ast-2')?.position;
+    engineS2.step(0.6);
+    const movedAstPos = engineS2
+      .getSnapshot()
+      .activeAsteroids.find((a) => a.id === 's2-ast-2')?.position;
+
+    expect(initialAstPos).toBeDefined();
+    expect(movedAstPos).toBeDefined();
+    expect(movedAstPos?.x).not.toBeCloseTo(initialAstPos?.x ?? 0, 2);
+
+    const wormholeStage: StageDefinition = {
+      id: 'wormhole-gravity-test',
+      name: 'Túnel Cuántico',
+      sectorNumber: 3,
+      difficultyLabel: 'Crítico',
+      deliveriesRequired: 1,
+      worldWidth: 540,
+      worldHeight: 960,
+      startPlanetId: 'p1',
+      startOrbitAngle: 0,
+      startOrbitDirection: -1,
+      targetSequence: ['p2'],
+      planets: [
+        {
+          id: 'p1',
+          name: 'Salida',
+          position: { x: 270, y: 780 },
+          visualRadius: 24,
+          orbitRadius: 40,
+          captureRadius: 60,
+          angularSpeed: 2.0,
+          color: '#38bdf8',
+          accentColor: '#bae6fd',
+        },
+        {
+          id: 'p2',
+          name: 'Meta Lejana',
+          position: { x: 140, y: 180 },
+          visualRadius: 26,
+          orbitRadius: 44,
+          captureRadius: 72,
+          angularSpeed: 2.0,
+          color: '#34d399',
+          accentColor: '#a7f3d0',
+        },
+      ],
+      asteroids: [],
+      gravityWells: [
+        {
+          id: 'gw-1',
+          name: 'Pozo Alfa',
+          position: { x: 265, y: 690 },
+          influenceRadius: 85,
+          coreRadius: 15,
+          strength: 9000,
+        },
+      ],
+      wormholes: [
+        {
+          id: 'wh-1',
+          name: 'Portal Alfa',
+          entryPosition: { x: 300, y: 620 },
+          exitPosition: { x: 140, y: 270 },
+          radius: 28,
+          color: '#c084fc',
+        },
+      ],
+    };
+
+    const whEngine = new SimulationEngine(wormholeStage);
+    whEngine.handleInput({ type: 'AIM_START' });
+    whEngine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
+
+    let traversedWormhole = false;
+    for (let i = 0; i < 60; i += 1) {
+      const ev = whEngine.step(GAME_CONFIG.fixedTimeStep);
+      if (ev.some((e) => e.type === 'WORMHOLE_TRAVERSED')) {
+        traversedWormhole = true;
+      }
+    }
+
+    expect(traversedWormhole).toBe(true);
+    expect(whEngine.getSnapshot().deliveriesCompleted).toBe(1);
+    expect(whEngine.getSnapshot().ship.currentPlanetId).toBe('p2');
   });
 });

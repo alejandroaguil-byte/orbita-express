@@ -9,6 +9,10 @@ export type AppState = 'START' | 'PLAYING' | 'PAUSED' | 'RESULT';
 
 export type ShipMode = 'ORBITING' | 'FLYING' | 'RECOVERING';
 
+export type ShipTier = 1 | 2 | 3;
+
+export type ShipPowerType = 'PHASE_SHIELD' | 'CHRONO_AIM' | 'MAGNETAR';
+
 export type FailureReason = 'OUT_OF_BOUNDS' | 'ASTEROID_HIT';
 
 export type GameOverReason = 'DELIVERIES_COMPLETED' | 'TIME_EXPIRED';
@@ -33,8 +37,71 @@ export interface PlanetDefinition {
 export interface AsteroidDefinition {
   readonly id: string;
   readonly position: Vector2D;
-  /** Radio de colisión y representación del asteroide estático */
+  /** Radio de colisión y representación del asteroide */
   readonly radius: number;
+  /** Desplazamiento máximo de patrulla (para asteroides móviles) */
+  readonly patrolOffset?: Vector2D;
+  /** Velocidad angular de oscilación de patrulla (rad/s) */
+  readonly patrolSpeed?: number;
+  /** Fase inicial de la patrulla en radianes */
+  readonly patrolPhase?: number;
+}
+
+export interface BoostGateDefinition {
+  readonly id: string;
+  readonly position: Vector2D;
+  readonly radius: number;
+  /** Ángulo de orientación del portal de impulso (radianes) */
+  readonly angle: number;
+  /** Multiplicador de velocidad aplicado al atravesar el anillo */
+  readonly speedMultiplier?: number;
+  /** Puntos extra otorgados al cruzar el anillo */
+  readonly bonusPoints?: number;
+}
+
+export interface GravityWellDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly position: Vector2D;
+  /** Radio de influencia gravitacional que curva el vuelo de la nave */
+  readonly influenceRadius: number;
+  /** Radio visual del núcleo de la singularidad */
+  readonly coreRadius: number;
+  /** Intensidad de aceleración gravitacional */
+  readonly strength: number;
+}
+
+export interface WormholePairDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly entryPosition: Vector2D;
+  readonly exitPosition: Vector2D;
+  readonly radius: number;
+  readonly color: string;
+}
+
+export interface PowerUpOrbDefinition {
+  readonly id: string;
+  readonly position: Vector2D;
+  readonly radius: number;
+  readonly power: ShipPowerType;
+}
+
+export interface AsteroidRuntimeState {
+  readonly id: string;
+  readonly position: Vector2D;
+  readonly basePosition: Vector2D;
+  readonly radius: number;
+  readonly isMoving: boolean;
+  readonly destroyed: boolean;
+}
+
+export interface PowerUpOrbRuntimeState {
+  readonly id: string;
+  readonly position: Vector2D;
+  readonly radius: number;
+  readonly power: ShipPowerType;
+  readonly collected: boolean;
 }
 
 export interface StageDefinition {
@@ -42,6 +109,7 @@ export interface StageDefinition {
   readonly name: string;
   readonly sectorNumber: number;
   readonly difficultyLabel: string;
+  readonly mechanicSummary?: string;
   readonly deliveriesRequired: number;
   readonly worldWidth: number;
   readonly worldHeight: number;
@@ -52,10 +120,25 @@ export interface StageDefinition {
   readonly targetSequence: readonly string[];
   readonly planets: readonly PlanetDefinition[];
   readonly asteroids: readonly AsteroidDefinition[];
+  readonly boostGates?: readonly BoostGateDefinition[];
+  readonly gravityWells?: readonly GravityWellDefinition[];
+  readonly wormholes?: readonly WormholePairDefinition[];
+  readonly powerUpOrbs?: readonly PowerUpOrbDefinition[];
+}
+
+export interface ShipPowersState {
+  /** Escudo de Fase activo: absorbe y destruye 1 asteroide en vuelo sin perder combo */
+  readonly phaseShield: boolean;
+  /** Segundos restantes del poder Enfoque Crono (ralentiza giro al apuntar y alarga mira) */
+  readonly chronoAimTimer: number;
+  /** Segundos restantes del poder Pulso Magnetar (mayor velocidad y radio de captura) */
+  readonly magnetarTimer: number;
 }
 
 export interface ShipState {
   readonly mode: ShipMode;
+  readonly tier: ShipTier;
+  readonly powers: ShipPowersState;
   readonly position: Vector2D;
   readonly velocity: Vector2D;
   /** Ángulo hacia donde apunta la proa o el movimiento de la nave (radianes) */
@@ -108,12 +191,22 @@ export type SimulationEventType =
   | 'SHIP_OUT_OF_BOUNDS'
   | 'SHIP_ASTEROID_HIT'
   | 'SHIP_RECOVERED'
+  | 'BOOST_GATE_PASSED'
+  | 'POWERUP_COLLECTED'
+  | 'SHIELD_ABSORBED_HIT'
+  | 'WORMHOLE_TRAVERSED'
+  | 'ORBIT_INVERTED'
+  | 'SHIP_UPGRADED'
   | 'GAME_FINISHED';
 
 export interface SimulationEvent {
   readonly type: SimulationEventType;
   readonly planetId?: string;
   readonly asteroidId?: string;
+  readonly gateId?: string;
+  readonly wormholeId?: string;
+  readonly power?: ShipPowerType;
+  readonly shipTier?: ShipTier;
   readonly deliveryNumber?: number;
   readonly sectorNumber?: number;
   readonly pointsAwarded?: number;
@@ -125,6 +218,7 @@ export type InputCommand =
   | { readonly type: 'AIM_START' }
   | { readonly type: 'AIM_RELEASE_LAUNCH' }
   | { readonly type: 'AIM_CANCEL' }
+  | { readonly type: 'FLIP_ORBIT' }
   | { readonly type: 'PAUSE_GAME'; readonly reason?: 'user' | 'visibility' }
   | { readonly type: 'RESUME_GAME' }
   | { readonly type: 'RESTART_GAME' };
@@ -162,5 +256,8 @@ export interface GameSnapshot {
   readonly deliveryEffect: DeliveryEffectState | null;
   readonly statusMessage: string | null;
   readonly statusMessageTimer: number;
+  readonly activeAsteroids: readonly AsteroidRuntimeState[];
+  readonly activePowerUpOrbs: readonly PowerUpOrbRuntimeState[];
+  readonly activatedGateIds: readonly string[];
   readonly stage: StageDefinition;
 }

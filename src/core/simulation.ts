@@ -3,6 +3,7 @@ import {
   AimGuideState,
   AppState,
   AsteroidDefinition,
+  AsteroidRuntimeState,
   DeliveryEffectState,
   FailureReason,
   GameOverReason,
@@ -10,7 +11,10 @@ import {
   InputCommand,
   OrbitDirection,
   PlanetDefinition,
+  PowerUpOrbRuntimeState,
+  ShipPowersState,
   ShipState,
+  ShipTier,
   SimulationEvent,
   SimulationOptions,
   StageDefinition,
@@ -31,6 +35,7 @@ export class SimulationEngine {
   private currentStageIndex = 0;
   private appState: AppState;
   private elapsedTime = 0;
+  private stageElapsedTime = 0;
   private remainingTime: number = GAME_CONFIG.matchDurationSeconds;
   private ship!: ShipState;
   private currentOrbitRadius = 0;
@@ -53,6 +58,11 @@ export class SimulationEngine {
   private deliveryEffect: DeliveryEffectState | null = null;
   private statusMessage: string | null = GAME_CONFIG.initialHelpText;
   private statusMessageTimer = 0;
+
+  private readonly destroyedAsteroidIds = new Set<string>();
+  private readonly collectedPowerUpIds = new Set<string>();
+  private readonly activatedGateIds = new Set<string>();
+  private readonly wormholeCooldownIds = new Set<string>();
 
   constructor(
     stageOrStages: StageDefinition | readonly StageDefinition[],
@@ -96,8 +106,67 @@ export class SimulationEngine {
     return found;
   }
 
-  private setupStageState(stageIndex: number): void {
+  private computeAsteroidPosition(asteroid: AsteroidDefinition): Vector2D {
+    const offset = asteroid.patrolOffset;
+    const speed = asteroid.patrolSpeed ?? 0;
+    if (!offset || (offset.x === 0 && offset.y === 0) || speed === 0) {
+      return asteroid.position;
+    }
+    const phase = (asteroid.patrolPhase ?? 0) + this.stageElapsedTime * speed;
+    const wave = Math.sin(phase);
+    return {
+      x: asteroid.position.x + offset.x * wave,
+      y: asteroid.position.y + offset.y * wave,
+    };
+  }
+
+  private getActiveAsteroids(): AsteroidRuntimeState[] {
+    const stage = this.getCurrentStage();
+    return stage.asteroids.map((ast) => {
+      const isMoving = Boolean(
+        ast.patrolOffset &&
+          (ast.patrolOffset.x !== 0 || ast.patrolOffset.y !== 0) &&
+          (ast.patrolSpeed ?? 0) !== 0,
+      );
+      return {
+        id: ast.id,
+        position: this.computeAsteroidPosition(ast),
+        basePosition: ast.position,
+        radius: ast.radius,
+        isMoving,
+        destroyed: this.destroyedAsteroidIds.has(ast.id),
+      };
+    });
+  }
+
+  private getActivePowerUpOrbs(): PowerUpOrbRuntimeState[] {
+    const stage = this.getCurrentStage();
+    const orbs = stage.powerUpOrbs ?? [];
+    return orbs.map((orb) => ({
+      id: orb.id,
+      position: orb.position,
+      radius: orb.radius,
+      power: orb.power,
+      collected: this.collectedPowerUpIds.has(orb.id),
+    }));
+  }
+
+  private setupStageState(
+    stageIndex: number,
+    preservedTier: ShipTier = 1,
+    preservedPowers: ShipPowersState = {
+      phaseShield: false,
+      chronoAimTimer: 0,
+      magnetarTimer: 0,
+    },
+  ): void {
     this.currentStageIndex = stageIndex;
+    this.stageElapsedTime = 0;
+    this.destroyedAsteroidIds.clear();
+    this.collectedPowerUpIds.clear();
+    this.activatedGateIds.clear();
+    this.wormholeCooldownIds.clear();
+
     const stage = this.getCurrentStage();
     const startPlanet = this.getPlanetById(stage.startPlanetId);
     const startAngle = stage.startOrbitAngle;
@@ -116,6 +185,8 @@ export class SimulationEngine {
 
     this.ship = {
       mode: 'ORBITING',
+      tier: preservedTier,
+      powers: preservedPowers,
       position: startPos,
       velocity: { x: 0, y: 0 },
       headingAngle: Math.atan2(tangent.y, tangent.x),
@@ -151,7 +222,11 @@ export class SimulationEngine {
     this.statusMessage = GAME_CONFIG.initialHelpText;
     this.statusMessageTimer = 0;
 
-    this.setupStageState(0);
+    this.setupStageState(0, 1, {
+      phaseShield: false,
+      chronoAimTimer: 0,
+      magnetarTimer: 0,
+    });
   }
 
   public getTargetPlanetId(): string {
@@ -161,6 +236,18 @@ export class SimulationEngine {
       return stage.startPlanetId;
     }
     return seq[this.targetSequenceIndex % seq.length];
+  }
+
+  private getEffectiveLaunchSpeed(): number {
+    const multiplier =
+      this.ship.powers.magnetarTimer > 0 ? GAME_CONFIG.magnetarLaunchSpeedMultiplier : 1;
+    return GAME_CONFIG.launchSpeed * multiplier;
+  }
+
+  private getEffectiveCaptureRadius(planet: PlanetDefinition): number {
+    const bonus =
+      this.ship.powers.magnetarTimer > 0 ? GAME_CONFIG.magnetarCaptureRadiusBonus : 0;
+    return planet.captureRadius + bonus;
   }
 
   public handleInput(command: InputCommand): SimulationEvent[] {
@@ -209,6 +296,26 @@ export class SimulationEngine {
         break;
       }
 
+      case 'FLIP_ORBIT': {
+        if (this.appState === 'PLAYING' && this.ship.mode === 'ORBITING') {
+          const nextDirection: OrbitDirection = this.ship.orbitDirection === 1 ? -1 : 1;
+          const tangent = computeOrbitTangent(this.ship.orbitAngle, nextDirection);
+          this.ship = {
+            ...this.ship,
+            orbitDirection: nextDirection,
+            lastSafeOrbitDirection: nextDirection,
+            headingAngle: Math.atan2(tangent.y, tangent.x),
+          };
+          this.statusMessage = '¡Propulsor lateral: sentido orbital invertido!';
+          this.statusMessageTimer = 1.6;
+          events.push({
+            type: 'ORBIT_INVERTED',
+            planetId: this.ship.currentPlanetId ?? undefined,
+          });
+        }
+        break;
+      }
+
       case 'AIM_RELEASE_LAUNCH': {
         if (
           this.appState === 'PLAYING' &&
@@ -217,11 +324,15 @@ export class SimulationEngine {
           this.ship.currentPlanetId !== null
         ) {
           this.isAiming = false;
+          this.activatedGateIds.clear();
+          this.wormholeCooldownIds.clear();
+
           const originId = this.ship.currentPlanetId;
           const tangent = computeOrbitTangent(this.ship.orbitAngle, this.ship.orbitDirection);
+          const launchSpeed = this.getEffectiveLaunchSpeed();
           const velocity: Vector2D = {
-            x: tangent.x * GAME_CONFIG.launchSpeed,
-            y: tangent.y * GAME_CONFIG.launchSpeed,
+            x: tangent.x * launchSpeed,
+            y: tangent.y * launchSpeed,
           };
 
           this.ship = {
@@ -256,7 +367,20 @@ export class SimulationEngine {
     }
 
     this.elapsedTime += dt;
+    this.stageElapsedTime += dt;
     this.remainingTime = Math.max(0, this.remainingTime - dt);
+
+    // Actualizar temporizadores de poderes activos
+    if (this.ship.powers.chronoAimTimer > 0 || this.ship.powers.magnetarTimer > 0) {
+      this.ship = {
+        ...this.ship,
+        powers: {
+          ...this.ship.powers,
+          chronoAimTimer: Math.max(0, this.ship.powers.chronoAimTimer - dt),
+          magnetarTimer: Math.max(0, this.ship.powers.magnetarTimer - dt),
+        },
+      };
+    }
 
     if (this.statusMessageTimer > 0) {
       this.statusMessageTimer = Math.max(0, this.statusMessageTimer - dt);
@@ -300,8 +424,13 @@ export class SimulationEngine {
       this.currentOrbitRadius = planet.orbitRadius;
     }
 
+    const slowDown =
+      this.isAiming && this.ship.powers.chronoAimTimer > 0
+        ? GAME_CONFIG.chronoAimOrbitSlowdownFactor
+        : 1;
+
     const nextAngle = normalizeAngle(
-      this.ship.orbitAngle + planet.angularSpeed * this.ship.orbitDirection * dt,
+      this.ship.orbitAngle + planet.angularSpeed * slowDown * this.ship.orbitDirection * dt,
     );
     const nextPos = computeOrbitPosition(planet.position, this.currentOrbitRadius, nextAngle);
     const tangent = computeOrbitTangent(nextAngle, this.ship.orbitDirection);
@@ -315,8 +444,151 @@ export class SimulationEngine {
     };
   }
 
+  private applyGravityWells(dt: number): void {
+    const wells = this.getCurrentStage().gravityWells;
+    if (!wells || wells.length === 0) {
+      return;
+    }
+
+    let vx = this.ship.velocity.x;
+    let vy = this.ship.velocity.y;
+    let changed = false;
+
+    for (const well of wells) {
+      const dx = well.position.x - this.ship.position.x;
+      const dy = well.position.y - this.ship.position.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 1 && dist <= well.influenceRadius) {
+        const pull = well.strength / Math.max(26, dist);
+        vx += (dx / dist) * pull * dt;
+        vy += (dy / dist) * pull * dt;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const speed = Math.hypot(vx, vy);
+      const minSpeed = GAME_CONFIG.launchSpeed * 0.85;
+      const maxSpeed = GAME_CONFIG.launchSpeed * 1.65;
+      if (speed > 0) {
+        const clampedSpeed = Math.max(minSpeed, Math.min(maxSpeed, speed));
+        vx = (vx / speed) * clampedSpeed;
+        vy = (vy / speed) * clampedSpeed;
+      }
+      this.ship = {
+        ...this.ship,
+        velocity: { x: vx, y: vy },
+        headingAngle: Math.atan2(vy, vx),
+      };
+    }
+  }
+
+  private checkFlightPowerUpsAndGates(
+    startPos: Vector2D,
+    endPos: Vector2D,
+    events: SimulationEvent[],
+  ): void {
+    const stage = this.getCurrentStage();
+
+    // 1. Cápsulas de poder (Power-Up Orbs)
+    for (const orb of stage.powerUpOrbs ?? []) {
+      if (this.collectedPowerUpIds.has(orb.id)) {
+        continue;
+      }
+      const hit = intersectSegmentCircle(startPos, endPos, orb.position, orb.radius);
+      if (hit !== null) {
+        this.collectedPowerUpIds.add(orb.id);
+        this.addScore(GAME_CONFIG.powerUpCollectPoints);
+
+        const prevTier = this.ship.tier;
+        const nextTier = Math.min(3, prevTier + 1) as ShipTier;
+        const nextPowers: ShipPowersState = {
+          phaseShield:
+            orb.power === 'PHASE_SHIELD' ? true : this.ship.powers.phaseShield,
+          chronoAimTimer:
+            orb.power === 'CHRONO_AIM'
+              ? GAME_CONFIG.chronoAimDurationSeconds
+              : this.ship.powers.chronoAimTimer,
+          magnetarTimer:
+            orb.power === 'MAGNETAR'
+              ? GAME_CONFIG.magnetarDurationSeconds
+              : this.ship.powers.magnetarTimer,
+        };
+
+        this.ship = {
+          ...this.ship,
+          tier: nextTier,
+          powers: nextPowers,
+        };
+
+        const powerLabel =
+          orb.power === 'PHASE_SHIELD'
+            ? 'Escudo de Fase'
+            : orb.power === 'CHRONO_AIM'
+              ? 'Enfoque Crono'
+              : 'Pulso Magnetar';
+        this.statusMessage = `¡Poder adquirido: ${powerLabel} (Nave MK-${nextTier})! +${GAME_CONFIG.powerUpCollectPoints} pts`;
+        this.statusMessageTimer = 2.8;
+
+        events.push({
+          type: 'POWERUP_COLLECTED',
+          power: orb.power,
+          shipTier: nextTier,
+          pointsAwarded: GAME_CONFIG.powerUpCollectPoints,
+        });
+
+        if (nextTier > prevTier) {
+          events.push({
+            type: 'SHIP_UPGRADED',
+            shipTier: nextTier,
+          });
+        }
+      }
+    }
+
+    // 2. Anillos de Impulso (Boost Gates)
+    for (const gate of stage.boostGates ?? []) {
+      if (this.activatedGateIds.has(gate.id)) {
+        continue;
+      }
+      const hit = intersectSegmentCircle(startPos, endPos, gate.position, gate.radius);
+      if (hit !== null) {
+        this.activatedGateIds.add(gate.id);
+        const mult = gate.speedMultiplier ?? GAME_CONFIG.boostGateDefaultSpeedMultiplier;
+        const bonus = gate.bonusPoints ?? GAME_CONFIG.boostGateBonusPoints;
+        this.addScore(bonus);
+
+        const vx = this.ship.velocity.x * mult;
+        const vy = this.ship.velocity.y * mult;
+
+        this.ship = {
+          ...this.ship,
+          velocity: { x: vx, y: vy },
+          headingAngle: Math.atan2(vy, vx),
+          powers: {
+            ...this.ship.powers,
+            magnetarTimer: Math.max(this.ship.powers.magnetarTimer, 8),
+          },
+        };
+
+        this.statusMessage = `¡Anillo de Impulso activado! Velocidad x${mult.toFixed(2)} (+${bonus} pts)`;
+        this.statusMessageTimer = 2.4;
+
+        events.push({
+          type: 'BOOST_GATE_PASSED',
+          gateId: gate.id,
+          pointsAwarded: bonus,
+        });
+      }
+    }
+  }
+
   private stepFlying(dt: number, events: SimulationEvent[]): void {
     const stage = this.getCurrentStage();
+
+    // Influencia de pozos gravitacionales sobre el vector de velocidad actual
+    this.applyGravityWells(dt);
+
     const startPos = this.ship.position;
     const endPos: Vector2D = {
       x: startPos.x + this.ship.velocity.x * dt,
@@ -326,21 +598,63 @@ export class SimulationEngine {
     let originLockedId = this.ship.originPlanetLockedId;
     if (originLockedId !== null) {
       const originPlanet = this.getPlanetById(originLockedId);
-      const unlockRadius = originPlanet.captureRadius + GAME_CONFIG.originUnlockMargin;
+      const unlockRadius =
+        this.getEffectiveCaptureRadius(originPlanet) + GAME_CONFIG.originUnlockMargin;
       if (distanceBetween(endPos, originPlanet.position) > unlockRadius) {
         originLockedId = null;
         events.push({ type: 'ORIGIN_UNLOCKED', planetId: originPlanet.id });
       }
     }
 
+    // Recolección de cápsulas y cruce por anillos de impulso en el segmento
+    this.checkFlightPowerUpsAndGates(startPos, endPos, events);
+
+    // Portales Wormhole (teletransporte cuántico de entrada a salida)
+    for (const wormhole of stage.wormholes ?? []) {
+      if (this.wormholeCooldownIds.has(wormhole.id)) {
+        continue;
+      }
+      const hit = intersectSegmentCircle(
+        startPos,
+        endPos,
+        wormhole.entryPosition,
+        wormhole.radius,
+      );
+      if (hit !== null) {
+        this.wormholeCooldownIds.add(wormhole.id);
+        this.addScore(GAME_CONFIG.wormholeBonusPoints);
+        const exitPos = wormhole.exitPosition;
+
+        this.ship = {
+          ...this.ship,
+          position: exitPos,
+          originPlanetLockedId: null,
+          trail: [exitPos],
+        };
+
+        this.statusMessage = `¡Salto por ${wormhole.name}! +${GAME_CONFIG.wormholeBonusPoints} pts`;
+        this.statusMessageTimer = 2.6;
+
+        events.push({
+          type: 'WORMHOLE_TRAVERSED',
+          wormholeId: wormhole.id,
+          pointsAwarded: GAME_CONFIG.wormholeBonusPoints,
+        });
+        return;
+      }
+    }
+
     interface AsteroidCandidate {
-      readonly asteroid: AsteroidDefinition;
+      readonly asteroid: AsteroidRuntimeState;
       readonly t: number;
       readonly point: Vector2D;
     }
 
     const asteroidHits: AsteroidCandidate[] = [];
-    for (const asteroid of stage.asteroids) {
+    for (const asteroid of this.getActiveAsteroids()) {
+      if (asteroid.destroyed) {
+        continue;
+      }
       const hit = intersectSegmentCircle(startPos, endPos, asteroid.position, asteroid.radius);
       if (hit !== null) {
         asteroidHits.push({
@@ -371,7 +685,13 @@ export class SimulationEngine {
         continue;
       }
 
-      const hit = intersectSegmentCircle(startPos, endPos, planet.position, planet.captureRadius);
+      const effectiveCaptureRadius = this.getEffectiveCaptureRadius(planet);
+      const hit = intersectSegmentCircle(
+        startPos,
+        endPos,
+        planet.position,
+        effectiveCaptureRadius,
+      );
       if (hit !== null) {
         captureCandidates.push({
           planet,
@@ -396,16 +716,40 @@ export class SimulationEngine {
     const firstCapture = captureCandidates[0] ?? null;
 
     if (firstAsteroid !== null && (firstCapture === null || firstAsteroid.t <= firstCapture.t)) {
-      this.triggerFlightFailure(
-        'ASTEROID_HIT',
-        firstAsteroid.point,
-        events,
-        firstAsteroid.asteroid.id,
-      );
-      return;
-    }
+      // ¿Tiene la nave el Escudo de Fase activo? Absorbe el golpe y destruye el asteroide
+      if (this.ship.powers.phaseShield) {
+        this.destroyedAsteroidIds.add(firstAsteroid.asteroid.id);
+        this.addScore(GAME_CONFIG.shieldAbsorbBonusPoints);
+        this.ship = {
+          ...this.ship,
+          powers: {
+            ...this.ship.powers,
+            phaseShield: false,
+          },
+        };
+        this.statusMessage = `¡Escudo de Fase pulverizó el asteroide! +${GAME_CONFIG.shieldAbsorbBonusPoints} pts`;
+        this.statusMessageTimer = 2.6;
+        events.push({
+          type: 'SHIELD_ABSORBED_HIT',
+          asteroidId: firstAsteroid.asteroid.id,
+          pointsAwarded: GAME_CONFIG.shieldAbsorbBonusPoints,
+        });
 
-    if (firstCapture !== null) {
+        // Si en el mismo paso también capturaba un planeta detrás, procesamos la captura
+        if (firstCapture !== null) {
+          this.capturePlanet(firstCapture.planet, firstCapture.point, events);
+          return;
+        }
+      } else {
+        this.triggerFlightFailure(
+          'ASTEROID_HIT',
+          firstAsteroid.point,
+          events,
+          firstAsteroid.asteroid.id,
+        );
+        return;
+      }
+    } else if (firstCapture !== null) {
       this.capturePlanet(firstCapture.planet, firstCapture.point, events);
       return;
     }
@@ -516,7 +860,20 @@ export class SimulationEngine {
         this.currentStageIndex + 1 < this.stages.length
       ) {
         const nextStageIndex = this.currentStageIndex + 1;
-        this.setupStageState(nextStageIndex);
+        const prevTier = this.ship.tier;
+        const upgradedTier = Math.min(3, Math.max(prevTier, nextStageIndex + 1)) as ShipTier;
+
+        // Evolución de la nave al avanzar de sector: otorga Escudo de Fase y en Sector 3 Enfoque Crono
+        const nextPowers: ShipPowersState = {
+          phaseShield: true,
+          chronoAimTimer:
+            upgradedTier >= 3
+              ? Math.max(this.ship.powers.chronoAimTimer, GAME_CONFIG.chronoAimDurationSeconds)
+              : this.ship.powers.chronoAimTimer,
+          magnetarTimer: this.ship.powers.magnetarTimer,
+        };
+
+        this.setupStageState(nextStageIndex, upgradedTier, nextPowers);
         const nextStage = this.getCurrentStage();
         const nextTarget = this.getPlanetById(this.getTargetPlanetId());
 
@@ -525,13 +882,21 @@ export class SimulationEngine {
           this.remainingTime + GAME_CONFIG.sectorClearTimeBonusSeconds,
         );
 
-        this.statusMessage = `¡Sector ${nextStage.sectorNumber}: ${nextStage.name} (${nextStage.difficultyLabel})! +${GAME_CONFIG.sectorClearTimeBonusSeconds}s · Destino: ${nextTarget.name}`;
+        this.statusMessage = `¡Sector ${nextStage.sectorNumber}: ${nextStage.name} · Nave MK-${upgradedTier} equipada! +${GAME_CONFIG.sectorClearTimeBonusSeconds}s · Destino: ${nextTarget.name}`;
         this.statusMessageTimer = 4.0;
+
+        if (upgradedTier > prevTier) {
+          events.push({
+            type: 'SHIP_UPGRADED',
+            shipTier: upgradedTier,
+          });
+        }
 
         events.push({
           type: 'SECTOR_ADVANCED',
           sectorNumber: nextStage.sectorNumber,
           planetId: nextTarget.id,
+          shipTier: upgradedTier,
         });
         return;
       }
@@ -681,9 +1046,14 @@ export class SimulationEngine {
     }
 
     const direction = computeOrbitTangent(this.ship.orbitAngle, this.ship.orbitDirection);
+    const guideLength =
+      this.ship.powers.chronoAimTimer > 0
+        ? GAME_CONFIG.aimGuideLength * GAME_CONFIG.chronoAimGuideLengthMultiplier
+        : GAME_CONFIG.aimGuideLength;
+
     const endPoint: Vector2D = {
-      x: this.ship.position.x + direction.x * GAME_CONFIG.aimGuideLength,
-      y: this.ship.position.y + direction.y * GAME_CONFIG.aimGuideLength,
+      x: this.ship.position.x + direction.x * guideLength,
+      y: this.ship.position.y + direction.y * guideLength,
     };
 
     return {
@@ -724,6 +1094,9 @@ export class SimulationEngine {
       deliveryEffect: this.deliveryEffect,
       statusMessage: this.statusMessage,
       statusMessageTimer: this.statusMessageTimer,
+      activeAsteroids: this.getActiveAsteroids(),
+      activePowerUpOrbs: this.getActivePowerUpOrbs(),
+      activatedGateIds: Array.from(this.activatedGateIds),
       stage: currentStage,
     };
   }
