@@ -93,6 +93,15 @@ export class InputController {
       return;
     }
 
+    if (event.code === 'KeyR' && !event.repeat) {
+      if (this.isInteractiveControlTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      this.onCommand({ type: 'FLIP_ORBIT' });
+      return;
+    }
+
     if ((event.code === 'Escape' || event.code === 'KeyP') && !event.repeat) {
       event.preventDefault();
       this.cancelActiveGestures();

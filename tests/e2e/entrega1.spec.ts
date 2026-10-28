@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Órbita Express - Verificación Integral de Navegador y Progresión de Sectores', () => {
-  test('flujo completo: inicio, sector 1/3, controles táctiles/teclado, cancelar gesto, pausa, fin de partida y 360px', async ({
+  test('flujo completo: inicio, sector 1/3, poderes de nave, inversión de órbita, controles táctiles/teclado, cancelar gesto, pausa, fin de partida y 360px', async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
@@ -18,10 +18,11 @@ test.describe('Órbita Express - Verificación Integral de Navegador y Progresi�
 
     await page.goto('/');
 
-    // 1. Verificar pantalla de Inicio visible, sector inicial y ayuda obligatoria
+    // 1. Verificar pantalla de Inicio visible, sector inicial, nivel de nave y ayuda obligatoria
     const startModal = page.locator('#start-modal');
     await expect(startModal).toBeVisible();
     await expect(page.locator('#hud-sector')).toHaveText('1 / 3');
+    await expect(page.locator('#hud-ship-powers')).toHaveText('MK-I · Base');
     await expect(page.locator('#hud-help-banner')).toHaveText(
       'Mantené presionado para ver la dirección. Soltá para saltar.',
     );
@@ -32,6 +33,24 @@ test.describe('Órbita Express - Verificación Integral de Navegador y Progresi�
 
     const shipStatus = page.locator('#hud-ship-status');
     await expect(shipStatus).toHaveText('Orbitando');
+
+    // Probar inversión de sentido orbital con botón #btn-flip-orbit y tecla R
+    const initialDir = await page.evaluate(
+      () => window.__ORBITA_DEBUG__?.getSnapshot().ship.orbitDirection,
+    );
+    expect(initialDir).toBe(1);
+
+    await page.locator('#btn-flip-orbit').click();
+    const flippedDir = await page.evaluate(
+      () => window.__ORBITA_DEBUG__?.getSnapshot().ship.orbitDirection,
+    );
+    expect(flippedDir).toBe(-1);
+
+    await page.keyboard.press('KeyR');
+    const restoredDir = await page.evaluate(
+      () => window.__ORBITA_DEBUG__?.getSnapshot().ship.orbitDirection,
+    );
+    expect(restoredDir).toBe(1);
 
     // 2. Probar mantener presionado y cancelar gesto (pointercancel) -> NO debe lanzar
     const canvas = page.locator('#game-canvas');

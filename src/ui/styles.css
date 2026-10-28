@@ -127,6 +127,10 @@ body {
   color: var(--accent-emerald);
 }
 
+.hud-value--powers {
+  color: #38bdf8;
+}
+
 .hud-actions {
   display: flex;
   align-items: center;
@@ -348,7 +352,7 @@ body {
 
   .hud-btn {
     padding: 4px 5px;
-    font-size: 0.64rem;
+    font-size: 0.62rem;
   }
 
   .hud-help-banner {
