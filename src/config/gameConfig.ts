@@ -41,6 +41,39 @@ export const GAME_CONFIG = {
   /** Longitud visual de la línea de ayuda de dirección (unidades lógicas) */
   aimGuideLength: 135,
 
+  /** Factor de ralentización orbital al apuntar con el poder Enfoque Crono (CHRONO_AIM) */
+  chronoAimOrbitSlowdownFactor: 0.65,
+
+  /** Multiplicador de longitud de la guía de puntería con Enfoque Crono */
+  chronoAimGuideLengthMultiplier: 1.45,
+
+  /** Duración otorgada al recolectar o activar el poder Enfoque Crono (segundos) */
+  chronoAimDurationSeconds: 16,
+
+  /** Multiplicador de velocidad de lanzamiento con el poder Pulso Magnetar */
+  magnetarLaunchSpeedMultiplier: 1.2,
+
+  /** Radio extra de captura gravitacional de planetas con Pulso Magnetar (unidades lógicas) */
+  magnetarCaptureRadiusBonus: 18,
+
+  /** Duración otorgada al recolectar o activar el poder Pulso Magnetar (segundos) */
+  magnetarDurationSeconds: 16,
+
+  /** Multiplicador por defecto al atravesar un Anillo de Impulso (Boost Gate) */
+  boostGateDefaultSpeedMultiplier: 1.38,
+
+  /** Puntos extra otorgados al atravesar un Anillo de Impulso */
+  boostGateBonusPoints: 75,
+
+  /** Puntos otorgados al recolectar una cápsula de poder en vuelo */
+  powerUpCollectPoints: 60,
+
+  /** Puntos otorgados al pulverizar un asteroide con el Escudo de Fase */
+  shieldAbsorbBonusPoints: 100,
+
+  /** Puntos otorgados al atravesar un portal Wormhole */
+  wormholeBonusPoints: 90,
+
   /**
    * Margen adicional fuera del captureRadius que la nave debe superar
    * para rehabilitar la captura en el mismo planeta de origen.
