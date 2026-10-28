@@ -74,6 +74,27 @@ export const GAME_CONFIG = {
   /** Puntos otorgados al atravesar un portal Wormhole */
   wormholeBonusPoints: 90,
 
+  /** Tolerancia (en unidades lógicas respecto a orbitRadius) para considerar una Captura Perfecta (Bullseye) */
+  perfectCaptureTolerance: 14,
+
+  /** Puntos de bonificación otorgados por lograr una Captura Perfecta (Bullseye) */
+  perfectCaptureBonusPoints: 120,
+
+  /** Segundos extra al reloj por lograr una Captura Perfecta (Bullseye) */
+  perfectCaptureTimeBonusSeconds: 1.5,
+
+  /** Multiplicador de velocidad al activar el Micro-Impulso en Vuelo (Flight Dash) */
+  flightDashSpeedMultiplier: 1.25,
+
+  /** Puntos extra por activar un Micro-Impulso en Vuelo */
+  flightDashBonusPoints: 40,
+
+  /** Duración de los textos flotantes en el escenario (segundos) */
+  floatingPopupDuration: 1.1,
+
+  /** Segundos extra al elegir la mejora de Sobrecarga de Escudo en la Armería entre sectores */
+  armoryShieldTimeBonusSeconds: 6,
+
   /**
    * Margen adicional fuera del captureRadius que la nave debe superar
    * para rehabilitar la captura en el mismo planeta de origen.

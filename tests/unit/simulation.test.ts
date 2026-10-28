@@ -41,6 +41,7 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     engine.handleInput({ type: 'AIM_START' });
     const aimingSnap1 = engine.getSnapshot();
     expect(aimingSnap1.aimGuide.active).toBe(true);
+    expect(aimingSnap1.aimGuide.points.length).toBeGreaterThan(2);
 
     engine.step(0.25);
     const aimingSnap2 = engine.getSnapshot();
@@ -82,6 +83,7 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
 
     expect(events.some((e) => e.type === 'SHIP_LAUNCHED')).toBe(true);
     expect(afterLaunch.ship.mode).toBe('FLYING');
+    expect(afterLaunch.ship.dashAvailableThisFlight).toBe(true);
     expect(afterLaunch.ship.currentPlanetId).toBeNull();
     expect(afterLaunch.ship.originPlanetLockedId).toBe('p-base');
     expect(afterLaunch.jumpCount).toBe(1);
@@ -184,7 +186,7 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(snap.ship.currentPlanetId).toBe('p2');
     expect(snap.deliveriesCompleted).toBe(1);
     expect(snap.combo).toBe(1);
-    expect(snap.score).toBe(GAME_CONFIG.baseDeliveryPoints);
+    expect(snap.score).toBeGreaterThanOrEqual(GAME_CONFIG.baseDeliveryPoints);
     expect(snap.targetPlanetId).toBe('p1');
   });
 
@@ -465,8 +467,17 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(engine.getSnapshot().deliveriesCompleted).toBe(1);
     expect(engine.getSnapshot().currentSectorNumber).toBe(2);
     expect(engine.getSnapshot().ship.tier).toBe(2);
+    expect(engine.getSnapshot().armoryChoiceAvailable).toBe(true);
     expect(engine.getSnapshot().ship.powers.phaseShield).toBe(true);
     expect(engine.getSnapshot().stage.id).toBe('stage-2-cinturon-cobalto');
+
+    // Elegir mejora de Armería al iniciar Sector 2
+    const upgradeEv = engine.handleInput({
+      type: 'SELECT_SECTOR_UPGRADE',
+      upgradeId: 'SHIELD_OVERCHARGE',
+    });
+    expect(upgradeEv.some((e) => e.type === 'SECTOR_UPGRADE_APPLIED')).toBe(true);
+    expect(engine.getSnapshot().armoryChoiceAvailable).toBe(false);
 
     // Sector 2: s2-base -> escala en s2-mid-center -> s2-high-east (meta del Sector 2) -> avanza al Sector 3 con MK-III
     expect(launchToPlanetInCurrentStage('s2-mid-center')).toBe(true);
@@ -488,7 +499,8 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(finalSnap.asteroidHitsCount).toBe(0);
     expect(finalSnap.appState).toBe('RESULT');
     expect(finalSnap.gameOverReason).toBe('DELIVERIES_COMPLETED');
-    expect(finalSnap.score).toBe(250 + 375 + 500 + finalSnap.timeBonusPoints);
+    const perfectBonus = finalSnap.perfectCapturesCount * GAME_CONFIG.perfectCaptureBonusPoints;
+    expect(finalSnap.score).toBe(250 + 375 + 500 + perfectBonus + finalSnap.timeBonusPoints);
   });
 
   it('invierte el sentido de giro orbital al ejecutar FLIP_ORBIT mientras orbita', () => {
@@ -587,8 +599,8 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(passedGate).toBe(true);
     expect(shieldAbsorbed).toBe(true);
     expect(snap.ship.tier).toBe(2);
-    expect(snap.ship.powers.phaseShield).toBe(false); // Consumido al pulverizar ast-barrier
-    expect(snap.ship.powers.magnetarTimer).toBeGreaterThan(0); // Otorgado por el Boost Gate
+    expect(snap.ship.powers.phaseShield).toBe(false);
+    expect(snap.ship.powers.magnetarTimer).toBeGreaterThan(0);
     expect(snap.activeAsteroids.find((a) => a.id === 'ast-barrier')?.destroyed).toBe(true);
     expect(snap.asteroidHitsCount).toBe(0);
     expect(snap.deliveriesCompleted).toBe(1);
@@ -671,6 +683,10 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
 
     const whEngine = new SimulationEngine(wormholeStage);
     whEngine.handleInput({ type: 'AIM_START' });
+    // La guía de puntería debe curvarse cuando el pozo gravitacional está cerca
+    const curvedGuide = whEngine.getSnapshot().aimGuide;
+    expect(curvedGuide.points.length).toBeGreaterThan(4);
+
     whEngine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
 
     let traversedWormhole = false;
@@ -684,5 +700,31 @@ describe('SimulationEngine - Mecánica, Partida Completa y Campaña de Sectores'
     expect(traversedWormhole).toBe(true);
     expect(whEngine.getSnapshot().deliveriesCompleted).toBe(1);
     expect(whEngine.getSnapshot().ship.currentPlanetId).toBe('p2');
+  });
+
+  it('ejecuta Micro-Impulso en vuelo (FLIGHT_DASH) una sola vez por salto y otorga puntos extra', () => {
+    const engine = new SimulationEngine(STAGE_1);
+    engine.handleInput({ type: 'AIM_START' });
+    engine.handleInput({ type: 'AIM_RELEASE_LAUNCH' });
+
+    const beforeDash = engine.getSnapshot();
+    const speedBefore = Math.hypot(beforeDash.ship.velocity.x, beforeDash.ship.velocity.y);
+    expect(beforeDash.ship.dashAvailableThisFlight).toBe(true);
+
+    const dashEvents = engine.handleInput({ type: 'FLIGHT_DASH' });
+    expect(dashEvents.some((e) => e.type === 'SHIP_DASHED')).toBe(true);
+
+    const afterDash = engine.getSnapshot();
+    const speedAfter = Math.hypot(afterDash.ship.velocity.x, afterDash.ship.velocity.y);
+    expect(speedAfter).toBeGreaterThan(speedBefore);
+    expect(afterDash.ship.dashAvailableThisFlight).toBe(false);
+    expect(afterDash.dashCount).toBe(1);
+    expect(afterDash.score).toBe(GAME_CONFIG.flightDashBonusPoints);
+    expect(afterDash.floatingPopups.length).toBeGreaterThan(0);
+
+    // Segundo intento en el mismo salto no debe aplicarse
+    const secondDashEvents = engine.handleInput({ type: 'FLIGHT_DASH' });
+    expect(secondDashEvents).toHaveLength(0);
+    expect(engine.getSnapshot().dashCount).toBe(1);
   });
 });

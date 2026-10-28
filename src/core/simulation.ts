@@ -6,12 +6,14 @@ import {
   AsteroidRuntimeState,
   DeliveryEffectState,
   FailureReason,
+  FloatingPopupState,
   GameOverReason,
   GameSnapshot,
   InputCommand,
   OrbitDirection,
   PlanetDefinition,
   PowerUpOrbRuntimeState,
+  SectorUpgradeOptionId,
   ShipPowersState,
   ShipState,
   ShipTier,
@@ -49,6 +51,9 @@ export class SimulationEngine {
   private isNewHighScore = false;
   private combo = 0;
   private maxCombo = 0;
+  private perfectCapturesCount = 0;
+  private dashCount = 0;
+  private armoryChoiceAvailable = false;
   private lastDeliveryPoints = 0;
   private timeBonusPoints = 0;
   private gameOverReason: GameOverReason | null = null;
@@ -56,6 +61,8 @@ export class SimulationEngine {
   private outOfBoundsCount = 0;
   private asteroidHitsCount = 0;
   private deliveryEffect: DeliveryEffectState | null = null;
+  private floatingPopups: FloatingPopupState[] = [];
+  private popupSequence = 0;
   private statusMessage: string | null = GAME_CONFIG.initialHelpText;
   private statusMessageTimer = 0;
 
@@ -104,6 +111,21 @@ export class SimulationEngine {
       throw new Error(`Planeta no encontrado en el escenario: ${planetId}`);
     }
     return found;
+  }
+
+  private spawnPopup(text: string, position: Vector2D, color: string): void {
+    this.popupSequence += 1;
+    this.floatingPopups = [
+      ...this.floatingPopups.slice(-7),
+      {
+        id: `popup-${this.popupSequence}`,
+        text,
+        position: { x: position.x, y: position.y - 16 },
+        color,
+        timer: GAME_CONFIG.floatingPopupDuration,
+        duration: GAME_CONFIG.floatingPopupDuration,
+      },
+    ];
   }
 
   private computeAsteroidPosition(asteroid: AsteroidDefinition): Vector2D {
@@ -187,6 +209,7 @@ export class SimulationEngine {
       mode: 'ORBITING',
       tier: preservedTier,
       powers: preservedPowers,
+      dashAvailableThisFlight: false,
       position: startPos,
       velocity: { x: 0, y: 0 },
       headingAngle: Math.atan2(tangent.y, tangent.x),
@@ -212,6 +235,9 @@ export class SimulationEngine {
     this.isNewHighScore = false;
     this.combo = 0;
     this.maxCombo = 0;
+    this.perfectCapturesCount = 0;
+    this.dashCount = 0;
+    this.armoryChoiceAvailable = false;
     this.lastDeliveryPoints = 0;
     this.timeBonusPoints = 0;
     this.gameOverReason = null;
@@ -219,6 +245,7 @@ export class SimulationEngine {
     this.outOfBoundsCount = 0;
     this.asteroidHitsCount = 0;
     this.deliveryEffect = null;
+    this.floatingPopups = [];
     this.statusMessage = GAME_CONFIG.initialHelpText;
     this.statusMessageTimer = 0;
 
@@ -248,6 +275,151 @@ export class SimulationEngine {
     const bonus =
       this.ship.powers.magnetarTimer > 0 ? GAME_CONFIG.magnetarCaptureRadiusBonus : 0;
     return planet.captureRadius + bonus;
+  }
+
+  private executeFlightDash(events: SimulationEvent[]): void {
+    if (
+      this.appState !== 'PLAYING' ||
+      this.ship.mode !== 'FLYING' ||
+      !this.ship.dashAvailableThisFlight
+    ) {
+      return;
+    }
+
+    const stage = this.getCurrentStage();
+    const currentSpeed = Math.hypot(this.ship.velocity.x, this.ship.velocity.y);
+    if (currentSpeed <= 1) {
+      return;
+    }
+
+    let dirX = this.ship.velocity.x / currentSpeed;
+    let dirY = this.ship.velocity.y / currentSpeed;
+
+    // Si hay un planeta adelante dentro de un cono de asistencia, curvar ligeramente hacia él
+    let bestPlanet: PlanetDefinition | null = null;
+    let bestDist = Infinity;
+
+    for (const planet of stage.planets) {
+      if (planet.id === this.ship.originPlanetLockedId) {
+        continue;
+      }
+      const toX = planet.position.x - this.ship.position.x;
+      const toY = planet.position.y - this.ship.position.y;
+      const dist = Math.hypot(toX, toY);
+      if (dist > 10 && dist < 340) {
+        const dot = (toX / dist) * dirX + (toY / dist) * dirY;
+        if (dot > 0.65 && dist < bestDist) {
+          bestDist = dist;
+          bestPlanet = planet;
+        }
+      }
+    }
+
+    if (bestPlanet !== null) {
+      const toX = bestPlanet.position.x - this.ship.position.x;
+      const toY = bestPlanet.position.y - this.ship.position.y;
+      const dist = Math.hypot(toX, toY);
+      if (dist > 0) {
+        const targetDirX = toX / dist;
+        const targetDirY = toY / dist;
+        const blend = 0.42;
+        const mixedX = dirX * (1 - blend) + targetDirX * blend;
+        const mixedY = dirY * (1 - blend) + targetDirY * blend;
+        const mixedLen = Math.hypot(mixedX, mixedY) || 1;
+        dirX = mixedX / mixedLen;
+        dirY = mixedY / mixedLen;
+      }
+    }
+
+    const boostedSpeed = Math.min(
+      GAME_CONFIG.launchSpeed * 1.75,
+      currentSpeed * GAME_CONFIG.flightDashSpeedMultiplier,
+    );
+    const nextVel: Vector2D = {
+      x: dirX * boostedSpeed,
+      y: dirY * boostedSpeed,
+    };
+
+    this.dashCount += 1;
+    this.addScore(GAME_CONFIG.flightDashBonusPoints);
+
+    this.ship = {
+      ...this.ship,
+      dashAvailableThisFlight: false,
+      velocity: nextVel,
+      headingAngle: Math.atan2(nextVel.y, nextVel.x),
+    };
+
+    this.spawnPopup(
+      `DASH +${GAME_CONFIG.flightDashBonusPoints}`,
+      this.ship.position,
+      '#38bdf8',
+    );
+    this.statusMessage = `¡Micro-Impulso en vuelo activado! +${GAME_CONFIG.flightDashBonusPoints} pts`;
+    this.statusMessageTimer = 1.8;
+
+    events.push({
+      type: 'SHIP_DASHED',
+      position: this.ship.position,
+      pointsAwarded: GAME_CONFIG.flightDashBonusPoints,
+    });
+  }
+
+  private applySectorUpgradeChoice(
+    upgradeId: SectorUpgradeOptionId,
+    events: SimulationEvent[],
+  ): void {
+    if (this.appState !== 'PLAYING' || !this.armoryChoiceAvailable) {
+      return;
+    }
+
+    this.armoryChoiceAvailable = false;
+
+    if (upgradeId === 'SHIELD_OVERCHARGE') {
+      this.remainingTime = Math.min(
+        GAME_CONFIG.maxMatchCapSeconds,
+        this.remainingTime + GAME_CONFIG.armoryShieldTimeBonusSeconds,
+      );
+      this.ship = {
+        ...this.ship,
+        powers: {
+          ...this.ship.powers,
+          phaseShield: true,
+        },
+      };
+      this.spawnPopup(
+        `ESCUDO +${GAME_CONFIG.armoryShieldTimeBonusSeconds}S`,
+        this.ship.position,
+        '#38bdf8',
+      );
+      this.statusMessage = `¡Armería: Escudo de Fase sobrecargado y +${GAME_CONFIG.armoryShieldTimeBonusSeconds}s al reloj!`;
+      this.statusMessageTimer = 2.6;
+    } else {
+      this.ship = {
+        ...this.ship,
+        powers: {
+          ...this.ship.powers,
+          chronoAimTimer: Math.max(
+            this.ship.powers.chronoAimTimer,
+            GAME_CONFIG.chronoAimDurationSeconds,
+          ),
+          magnetarTimer: Math.max(
+            this.ship.powers.magnetarTimer,
+            GAME_CONFIG.magnetarDurationSeconds,
+          ),
+        },
+      };
+      this.spawnPopup('MAGNETAR + CRONO', this.ship.position, '#fde047');
+      this.statusMessage =
+        '¡Armería: Pulso Magnetar + Enfoque Crono activados a máxima potencia!';
+      this.statusMessageTimer = 2.6;
+    }
+
+    events.push({
+      type: 'SECTOR_UPGRADE_APPLIED',
+      upgradeId,
+      position: this.ship.position,
+    });
   }
 
   public handleInput(command: InputCommand): SimulationEvent[] {
@@ -291,6 +463,16 @@ export class SimulationEngine {
         break;
       }
 
+      case 'FLIGHT_DASH': {
+        this.executeFlightDash(events);
+        break;
+      }
+
+      case 'SELECT_SECTOR_UPGRADE': {
+        this.applySectorUpgradeChoice(command.upgradeId, events);
+        break;
+      }
+
       case 'AIM_CANCEL': {
         this.isAiming = false;
         break;
@@ -306,11 +488,13 @@ export class SimulationEngine {
             lastSafeOrbitDirection: nextDirection,
             headingAngle: Math.atan2(tangent.y, tangent.x),
           };
+          this.spawnPopup('GIRO INVERTIDO', this.ship.position, '#a78bfa');
           this.statusMessage = '¡Propulsor lateral: sentido orbital invertido!';
           this.statusMessageTimer = 1.6;
           events.push({
             type: 'ORBIT_INVERTED',
             planetId: this.ship.currentPlanetId ?? undefined,
+            position: this.ship.position,
           });
         }
         break;
@@ -324,6 +508,7 @@ export class SimulationEngine {
           this.ship.currentPlanetId !== null
         ) {
           this.isAiming = false;
+          this.armoryChoiceAvailable = false;
           this.activatedGateIds.clear();
           this.wormholeCooldownIds.clear();
 
@@ -338,6 +523,7 @@ export class SimulationEngine {
           this.ship = {
             ...this.ship,
             mode: 'FLYING',
+            dashAvailableThisFlight: true,
             velocity,
             headingAngle: Math.atan2(velocity.y, velocity.x),
             currentPlanetId: null,
@@ -349,7 +535,11 @@ export class SimulationEngine {
           };
 
           this.jumpCount += 1;
-          events.push({ type: 'SHIP_LAUNCHED', planetId: originId });
+          events.push({
+            type: 'SHIP_LAUNCHED',
+            planetId: originId,
+            position: this.ship.position,
+          });
         } else {
           this.isAiming = false;
         }
@@ -370,7 +560,6 @@ export class SimulationEngine {
     this.stageElapsedTime += dt;
     this.remainingTime = Math.max(0, this.remainingTime - dt);
 
-    // Actualizar temporizadores de poderes activos
     if (this.ship.powers.chronoAimTimer > 0 || this.ship.powers.magnetarTimer > 0) {
       this.ship = {
         ...this.ship,
@@ -395,6 +584,16 @@ export class SimulationEngine {
         nextEffectTimer > 0
           ? { ...this.deliveryEffect, timer: nextEffectTimer }
           : null;
+    }
+
+    if (this.floatingPopups.length > 0) {
+      this.floatingPopups = this.floatingPopups
+        .map((p) => ({
+          ...p,
+          timer: p.timer - dt,
+          position: { x: p.position.x, y: p.position.y - 22 * dt },
+        }))
+        .filter((p) => p.timer > 0);
     }
 
     if (this.ship.mode === 'ORBITING') {
@@ -444,19 +643,23 @@ export class SimulationEngine {
     };
   }
 
-  private applyGravityWells(dt: number): void {
+  private computeGravityAdjustedVelocity(
+    pos: Vector2D,
+    vel: Vector2D,
+    dt: number,
+  ): Vector2D {
     const wells = this.getCurrentStage().gravityWells;
     if (!wells || wells.length === 0) {
-      return;
+      return vel;
     }
 
-    let vx = this.ship.velocity.x;
-    let vy = this.ship.velocity.y;
+    let vx = vel.x;
+    let vy = vel.y;
     let changed = false;
 
     for (const well of wells) {
-      const dx = well.position.x - this.ship.position.x;
-      const dy = well.position.y - this.ship.position.y;
+      const dx = well.position.x - pos.x;
+      const dy = well.position.y - pos.y;
       const dist = Math.hypot(dx, dy);
       if (dist > 1 && dist <= well.influenceRadius) {
         const pull = well.strength / Math.max(26, dist);
@@ -466,19 +669,33 @@ export class SimulationEngine {
       }
     }
 
-    if (changed) {
-      const speed = Math.hypot(vx, vy);
-      const minSpeed = GAME_CONFIG.launchSpeed * 0.85;
-      const maxSpeed = GAME_CONFIG.launchSpeed * 1.65;
-      if (speed > 0) {
-        const clampedSpeed = Math.max(minSpeed, Math.min(maxSpeed, speed));
-        vx = (vx / speed) * clampedSpeed;
-        vy = (vy / speed) * clampedSpeed;
-      }
+    if (!changed) {
+      return vel;
+    }
+
+    const speed = Math.hypot(vx, vy);
+    const minSpeed = GAME_CONFIG.launchSpeed * 0.85;
+    const maxSpeed = GAME_CONFIG.launchSpeed * 1.65;
+    if (speed > 0) {
+      const clampedSpeed = Math.max(minSpeed, Math.min(maxSpeed, speed));
+      vx = (vx / speed) * clampedSpeed;
+      vy = (vy / speed) * clampedSpeed;
+    }
+
+    return { x: vx, y: vy };
+  }
+
+  private applyGravityWells(dt: number): void {
+    const nextVel = this.computeGravityAdjustedVelocity(
+      this.ship.position,
+      this.ship.velocity,
+      dt,
+    );
+    if (nextVel.x !== this.ship.velocity.x || nextVel.y !== this.ship.velocity.y) {
       this.ship = {
         ...this.ship,
-        velocity: { x: vx, y: vy },
-        headingAngle: Math.atan2(vy, vx),
+        velocity: nextVel,
+        headingAngle: Math.atan2(nextVel.y, nextVel.x),
       };
     }
   }
@@ -527,11 +744,21 @@ export class SimulationEngine {
             : orb.power === 'CHRONO_AIM'
               ? 'Enfoque Crono'
               : 'Pulso Magnetar';
+        this.spawnPopup(
+          `+${powerLabel.toUpperCase()}`,
+          orb.position,
+          orb.power === 'PHASE_SHIELD'
+            ? '#38bdf8'
+            : orb.power === 'CHRONO_AIM'
+              ? '#fde047'
+              : '#c084fc',
+        );
         this.statusMessage = `¡Poder adquirido: ${powerLabel} (Nave MK-${nextTier})! +${GAME_CONFIG.powerUpCollectPoints} pts`;
         this.statusMessageTimer = 2.8;
 
         events.push({
           type: 'POWERUP_COLLECTED',
+          position: orb.position,
           power: orb.power,
           shipTier: nextTier,
           pointsAwarded: GAME_CONFIG.powerUpCollectPoints,
@@ -540,6 +767,7 @@ export class SimulationEngine {
         if (nextTier > prevTier) {
           events.push({
             type: 'SHIP_UPGRADED',
+            position: orb.position,
             shipTier: nextTier,
           });
         }
@@ -571,11 +799,13 @@ export class SimulationEngine {
           },
         };
 
+        this.spawnPopup(`IMPULSO +${bonus}`, gate.position, '#2dd4bf');
         this.statusMessage = `¡Anillo de Impulso activado! Velocidad x${mult.toFixed(2)} (+${bonus} pts)`;
         this.statusMessageTimer = 2.4;
 
         events.push({
           type: 'BOOST_GATE_PASSED',
+          position: gate.position,
           gateId: gate.id,
           pointsAwarded: bonus,
         });
@@ -586,7 +816,6 @@ export class SimulationEngine {
   private stepFlying(dt: number, events: SimulationEvent[]): void {
     const stage = this.getCurrentStage();
 
-    // Influencia de pozos gravitacionales sobre el vector de velocidad actual
     this.applyGravityWells(dt);
 
     const startPos = this.ship.position;
@@ -606,10 +835,9 @@ export class SimulationEngine {
       }
     }
 
-    // Recolección de cápsulas y cruce por anillos de impulso en el segmento
     this.checkFlightPowerUpsAndGates(startPos, endPos, events);
 
-    // Portales Wormhole (teletransporte cuántico de entrada a salida)
+    // Portales Wormhole
     for (const wormhole of stage.wormholes ?? []) {
       if (this.wormholeCooldownIds.has(wormhole.id)) {
         continue;
@@ -632,11 +860,13 @@ export class SimulationEngine {
           trail: [exitPos],
         };
 
+        this.spawnPopup(`PORTAL +${GAME_CONFIG.wormholeBonusPoints}`, exitPos, '#c084fc');
         this.statusMessage = `¡Salto por ${wormhole.name}! +${GAME_CONFIG.wormholeBonusPoints} pts`;
         this.statusMessageTimer = 2.6;
 
         events.push({
           type: 'WORMHOLE_TRAVERSED',
+          position: exitPos,
           wormholeId: wormhole.id,
           pointsAwarded: GAME_CONFIG.wormholeBonusPoints,
         });
@@ -716,7 +946,6 @@ export class SimulationEngine {
     const firstCapture = captureCandidates[0] ?? null;
 
     if (firstAsteroid !== null && (firstCapture === null || firstAsteroid.t <= firstCapture.t)) {
-      // ¿Tiene la nave el Escudo de Fase activo? Absorbe el golpe y destruye el asteroide
       if (this.ship.powers.phaseShield) {
         this.destroyedAsteroidIds.add(firstAsteroid.asteroid.id);
         this.addScore(GAME_CONFIG.shieldAbsorbBonusPoints);
@@ -727,17 +956,27 @@ export class SimulationEngine {
             phaseShield: false,
           },
         };
+        this.spawnPopup(
+          `ESCUDO +${GAME_CONFIG.shieldAbsorbBonusPoints}`,
+          firstAsteroid.point,
+          '#38bdf8',
+        );
         this.statusMessage = `¡Escudo de Fase pulverizó el asteroide! +${GAME_CONFIG.shieldAbsorbBonusPoints} pts`;
         this.statusMessageTimer = 2.6;
         events.push({
           type: 'SHIELD_ABSORBED_HIT',
+          position: firstAsteroid.point,
           asteroidId: firstAsteroid.asteroid.id,
           pointsAwarded: GAME_CONFIG.shieldAbsorbBonusPoints,
         });
 
-        // Si en el mismo paso también capturaba un planeta detrás, procesamos la captura
         if (firstCapture !== null) {
-          this.capturePlanet(firstCapture.planet, firstCapture.point, events);
+          this.capturePlanet(
+            firstCapture.planet,
+            firstCapture.point,
+            firstCapture.centerDistAtEnd,
+            events,
+          );
           return;
         }
       } else {
@@ -750,7 +989,12 @@ export class SimulationEngine {
         return;
       }
     } else if (firstCapture !== null) {
-      this.capturePlanet(firstCapture.planet, firstCapture.point, events);
+      this.capturePlanet(
+        firstCapture.planet,
+        firstCapture.point,
+        firstCapture.centerDistAtEnd,
+        events,
+      );
       return;
     }
 
@@ -777,6 +1021,7 @@ export class SimulationEngine {
   private capturePlanet(
     planet: PlanetDefinition,
     entryPoint: Vector2D,
+    centerDistAtEnd: number,
     events: SimulationEvent[],
   ): void {
     const stage = this.getCurrentStage();
@@ -795,9 +1040,14 @@ export class SimulationEngine {
     const exactEntryPos = computeOrbitPosition(planet.position, entryRadius, orbitAngle);
     const tangent = computeOrbitTangent(orbitAngle, orbitDirection);
 
+    // ¿Fue una Captura Perfecta (Bullseye) cercana al anillo orbital ideal?
+    const isPerfectCapture =
+      Math.abs(centerDistAtEnd - planet.orbitRadius) <= GAME_CONFIG.perfectCaptureTolerance;
+
     this.ship = {
       ...this.ship,
       mode: 'ORBITING',
+      dashAvailableThisFlight: false,
       position: exactEntryPos,
       velocity: { x: 0, y: 0 },
       headingAngle: Math.atan2(tangent.y, tangent.x),
@@ -813,7 +1063,31 @@ export class SimulationEngine {
       trail: this.appendTrail(exactEntryPos),
     };
 
-    events.push({ type: 'PLANET_CAPTURED', planetId: planet.id });
+    events.push({
+      type: 'PLANET_CAPTURED',
+      planetId: planet.id,
+      position: exactEntryPos,
+    });
+
+    if (isPerfectCapture) {
+      this.perfectCapturesCount += 1;
+      this.addScore(GAME_CONFIG.perfectCaptureBonusPoints);
+      this.remainingTime = Math.min(
+        GAME_CONFIG.maxMatchCapSeconds,
+        this.remainingTime + GAME_CONFIG.perfectCaptureTimeBonusSeconds,
+      );
+      this.spawnPopup(
+        `PERFECTO! +${GAME_CONFIG.perfectCaptureBonusPoints}`,
+        planet.position,
+        '#fde047',
+      );
+      events.push({
+        type: 'PERFECT_CAPTURE',
+        planetId: planet.id,
+        position: planet.position,
+        pointsAwarded: GAME_CONFIG.perfectCaptureBonusPoints,
+      });
+    }
 
     if (planet.id === this.getTargetPlanetId()) {
       this.deliveriesCompleted += 1;
@@ -838,12 +1112,12 @@ export class SimulationEngine {
       events.push({
         type: 'DELIVERY_COMPLETED',
         planetId: planet.id,
+        position: planet.position,
         deliveryNumber: this.deliveriesCompleted,
         sectorNumber: stage.sectorNumber,
         pointsAwarded: deliveryPoints,
       });
 
-      // ¿Completamos todas las entregas de la campaña o escenario?
       if (this.deliveriesCompleted >= this.totalDeliveriesGoal) {
         const timeBonus = calculateTimeBonus(this.remainingTime);
         this.timeBonusPoints = timeBonus;
@@ -854,7 +1128,6 @@ export class SimulationEngine {
         return;
       }
 
-      // ¿Completamos las entregas requeridas del sector actual y hay un siguiente sector?
       if (
         this.sectorDeliveriesCompleted >= this.getCurrentSectorGoal() &&
         this.currentStageIndex + 1 < this.stages.length
@@ -863,7 +1136,6 @@ export class SimulationEngine {
         const prevTier = this.ship.tier;
         const upgradedTier = Math.min(3, Math.max(prevTier, nextStageIndex + 1)) as ShipTier;
 
-        // Evolución de la nave al avanzar de sector: otorga Escudo de Fase y en Sector 3 Enfoque Crono
         const nextPowers: ShipPowersState = {
           phaseShield: true,
           chronoAimTimer:
@@ -874,6 +1146,8 @@ export class SimulationEngine {
         };
 
         this.setupStageState(nextStageIndex, upgradedTier, nextPowers);
+        this.armoryChoiceAvailable = true;
+
         const nextStage = this.getCurrentStage();
         const nextTarget = this.getPlanetById(this.getTargetPlanetId());
 
@@ -882,18 +1156,25 @@ export class SimulationEngine {
           this.remainingTime + GAME_CONFIG.sectorClearTimeBonusSeconds,
         );
 
+        this.spawnPopup(
+          `SECTOR ${nextStage.sectorNumber} · MK-${upgradedTier}`,
+          this.ship.position,
+          '#34d399',
+        );
         this.statusMessage = `¡Sector ${nextStage.sectorNumber}: ${nextStage.name} · Nave MK-${upgradedTier} equipada! +${GAME_CONFIG.sectorClearTimeBonusSeconds}s · Destino: ${nextTarget.name}`;
         this.statusMessageTimer = 4.0;
 
         if (upgradedTier > prevTier) {
           events.push({
             type: 'SHIP_UPGRADED',
+            position: this.ship.position,
             shipTier: upgradedTier,
           });
         }
 
         events.push({
           type: 'SECTOR_ADVANCED',
+          position: this.ship.position,
           sectorNumber: nextStage.sectorNumber,
           planetId: nextTarget.id,
           shipTier: upgradedTier,
@@ -912,7 +1193,8 @@ export class SimulationEngine {
       this.statusMessageTimer = 3.2;
     } else {
       const target = this.getPlanetById(this.getTargetPlanetId());
-      this.statusMessage = `Escala en ${planet.name}. Destino actual: ${target.name}`;
+      const perfectTag = isPerfectCapture ? '¡Captura Perfecta! ' : '';
+      this.statusMessage = `${perfectTag}Escala en ${planet.name}. Destino actual: ${target.name}`;
       this.statusMessageTimer = 2.0;
     }
   }
@@ -935,17 +1217,21 @@ export class SimulationEngine {
 
     if (reason === 'ASTEROID_HIT') {
       this.asteroidHitsCount += 1;
+      this.spawnPopup(`-${GAME_CONFIG.failureTimePenaltySeconds}S IMPACTO`, contactPos, '#f43f5e');
       this.statusMessage = `¡Impacto con asteroide! ${penaltyText} · Volviendo a ${safePlanet.name}`;
       events.push({
         type: 'SHIP_ASTEROID_HIT',
+        position: contactPos,
         planetId: safePlanet.id,
         asteroidId,
       });
     } else {
       this.outOfBoundsCount += 1;
+      this.spawnPopup(`-${GAME_CONFIG.failureTimePenaltySeconds}S DESVÍO`, contactPos, '#f43f5e');
       this.statusMessage = `Desvío fuera de sector ${penaltyText} · Volviendo a ${safePlanet.name}`;
       events.push({
         type: 'SHIP_OUT_OF_BOUNDS',
+        position: contactPos,
         planetId: safePlanet.id,
       });
     }
@@ -955,6 +1241,7 @@ export class SimulationEngine {
     this.ship = {
       ...this.ship,
       mode: 'RECOVERING',
+      dashAvailableThisFlight: false,
       position: contactPos,
       velocity: { x: 0, y: 0 },
       originPlanetLockedId: null,
@@ -970,6 +1257,7 @@ export class SimulationEngine {
   private finishMatch(reason: GameOverReason, events: SimulationEvent[]): void {
     this.appState = 'RESULT';
     this.isAiming = false;
+    this.armoryChoiceAvailable = false;
     this.gameOverReason = reason;
 
     if (reason === 'TIME_EXPIRED') {
@@ -1012,6 +1300,7 @@ export class SimulationEngine {
     this.ship = {
       ...this.ship,
       mode: 'ORBITING',
+      dashAvailableThisFlight: false,
       position: restoredPos,
       velocity: { x: 0, y: 0 },
       headingAngle: Math.atan2(tangent.y, tangent.x),
@@ -1024,7 +1313,11 @@ export class SimulationEngine {
       trail: [restoredPos],
     };
 
-    events.push({ type: 'SHIP_RECOVERED', planetId: safePlanet.id });
+    events.push({
+      type: 'SHIP_RECOVERED',
+      planetId: safePlanet.id,
+      position: restoredPos,
+    });
   }
 
   private appendTrail(point: Vector2D): readonly Vector2D[] {
@@ -1042,6 +1335,7 @@ export class SimulationEngine {
         origin: this.ship.position,
         direction: { x: 0, y: -1 },
         endPoint: this.ship.position,
+        points: [this.ship.position],
       };
     }
 
@@ -1051,16 +1345,36 @@ export class SimulationEngine {
         ? GAME_CONFIG.aimGuideLength * GAME_CONFIG.chronoAimGuideLengthMultiplier
         : GAME_CONFIG.aimGuideLength;
 
-    const endPoint: Vector2D = {
-      x: this.ship.position.x + direction.x * guideLength,
-      y: this.ship.position.y + direction.y * guideLength,
+    // Simular puntos de la trayectoria teniendo en cuenta pozos gravitacionales
+    const sampleSteps = this.ship.powers.chronoAimTimer > 0 ? 16 : 12;
+    const launchSpeed = this.getEffectiveLaunchSpeed();
+    const totalSimTime = guideLength / launchSpeed;
+    const stepDt = totalSimTime / sampleSteps;
+
+    const points: Vector2D[] = [this.ship.position];
+    let simPos: Vector2D = this.ship.position;
+    let simVel: Vector2D = {
+      x: direction.x * launchSpeed,
+      y: direction.y * launchSpeed,
     };
+
+    for (let i = 0; i < sampleSteps; i += 1) {
+      simVel = this.computeGravityAdjustedVelocity(simPos, simVel, stepDt);
+      simPos = {
+        x: simPos.x + simVel.x * stepDt,
+        y: simPos.y + simVel.y * stepDt,
+      };
+      points.push(simPos);
+    }
+
+    const endPoint = points[points.length - 1];
 
     return {
       active: true,
       origin: this.ship.position,
       direction,
       endPoint,
+      points,
     };
   }
 
@@ -1085,6 +1399,9 @@ export class SimulationEngine {
       isNewHighScore: this.isNewHighScore,
       combo: this.combo,
       maxCombo: this.maxCombo,
+      perfectCapturesCount: this.perfectCapturesCount,
+      dashCount: this.dashCount,
+      armoryChoiceAvailable: this.armoryChoiceAvailable,
       lastDeliveryPoints: this.lastDeliveryPoints,
       timeBonusPoints: this.timeBonusPoints,
       gameOverReason: this.gameOverReason,
@@ -1092,6 +1409,7 @@ export class SimulationEngine {
       outOfBoundsCount: this.outOfBoundsCount,
       asteroidHitsCount: this.asteroidHitsCount,
       deliveryEffect: this.deliveryEffect,
+      floatingPopups: this.floatingPopups,
       statusMessage: this.statusMessage,
       statusMessageTimer: this.statusMessageTimer,
       activeAsteroids: this.getActiveAsteroids(),

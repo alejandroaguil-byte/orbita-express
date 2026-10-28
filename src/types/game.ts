@@ -13,6 +13,8 @@ export type ShipTier = 1 | 2 | 3;
 
 export type ShipPowerType = 'PHASE_SHIELD' | 'CHRONO_AIM' | 'MAGNETAR';
 
+export type SectorUpgradeOptionId = 'SHIELD_OVERCHARGE' | 'MAGNETAR_CHRONO';
+
 export type FailureReason = 'OUT_OF_BOUNDS' | 'ASTEROID_HIT';
 
 export type GameOverReason = 'DELIVERIES_COMPLETED' | 'TIME_EXPIRED';
@@ -104,6 +106,15 @@ export interface PowerUpOrbRuntimeState {
   readonly collected: boolean;
 }
 
+export interface FloatingPopupState {
+  readonly id: string;
+  readonly text: string;
+  readonly position: Vector2D;
+  readonly color: string;
+  readonly timer: number;
+  readonly duration: number;
+}
+
 export interface StageDefinition {
   readonly id: string;
   readonly name: string;
@@ -139,6 +150,8 @@ export interface ShipState {
   readonly mode: ShipMode;
   readonly tier: ShipTier;
   readonly powers: ShipPowersState;
+  /** Indica si el piloto aún puede activar el Micro-Impulso (Dash) durante el salto actual */
+  readonly dashAvailableThisFlight: boolean;
   readonly position: Vector2D;
   readonly velocity: Vector2D;
   /** Ángulo hacia donde apunta la proa o el movimiento de la nave (radianes) */
@@ -171,6 +184,8 @@ export interface AimGuideState {
   readonly origin: Vector2D;
   readonly direction: Vector2D;
   readonly endPoint: Vector2D;
+  /** Puntos muestreados de la trayectoria prevista (incluye curvatura por pozos gravitacionales) */
+  readonly points: readonly Vector2D[];
 }
 
 export interface DeliveryEffectState {
@@ -184,9 +199,12 @@ export interface DeliveryEffectState {
 export type SimulationEventType =
   | 'GAME_STARTED'
   | 'SHIP_LAUNCHED'
+  | 'SHIP_DASHED'
   | 'PLANET_CAPTURED'
+  | 'PERFECT_CAPTURE'
   | 'DELIVERY_COMPLETED'
   | 'SECTOR_ADVANCED'
+  | 'SECTOR_UPGRADE_APPLIED'
   | 'ORIGIN_UNLOCKED'
   | 'SHIP_OUT_OF_BOUNDS'
   | 'SHIP_ASTEROID_HIT'
@@ -201,11 +219,13 @@ export type SimulationEventType =
 
 export interface SimulationEvent {
   readonly type: SimulationEventType;
+  readonly position?: Vector2D;
   readonly planetId?: string;
   readonly asteroidId?: string;
   readonly gateId?: string;
   readonly wormholeId?: string;
   readonly power?: ShipPowerType;
+  readonly upgradeId?: SectorUpgradeOptionId;
   readonly shipTier?: ShipTier;
   readonly deliveryNumber?: number;
   readonly sectorNumber?: number;
@@ -218,7 +238,9 @@ export type InputCommand =
   | { readonly type: 'AIM_START' }
   | { readonly type: 'AIM_RELEASE_LAUNCH' }
   | { readonly type: 'AIM_CANCEL' }
+  | { readonly type: 'FLIGHT_DASH' }
   | { readonly type: 'FLIP_ORBIT' }
+  | { readonly type: 'SELECT_SECTOR_UPGRADE'; readonly upgradeId: SectorUpgradeOptionId }
   | { readonly type: 'PAUSE_GAME'; readonly reason?: 'user' | 'visibility' }
   | { readonly type: 'RESUME_GAME' }
   | { readonly type: 'RESTART_GAME' };
@@ -247,6 +269,9 @@ export interface GameSnapshot {
   readonly isNewHighScore: boolean;
   readonly combo: number;
   readonly maxCombo: number;
+  readonly perfectCapturesCount: number;
+  readonly dashCount: number;
+  readonly armoryChoiceAvailable: boolean;
   readonly lastDeliveryPoints: number;
   readonly timeBonusPoints: number;
   readonly gameOverReason: GameOverReason | null;
@@ -254,6 +279,7 @@ export interface GameSnapshot {
   readonly outOfBoundsCount: number;
   readonly asteroidHitsCount: number;
   readonly deliveryEffect: DeliveryEffectState | null;
+  readonly floatingPopups: readonly FloatingPopupState[];
   readonly statusMessage: string | null;
   readonly statusMessageTimer: number;
   readonly activeAsteroids: readonly AsteroidRuntimeState[];
