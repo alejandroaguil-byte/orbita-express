@@ -162,7 +162,6 @@ export class SoundEffectsController {
   ): void {
     if (!this.ctx) return;
 
-    // 1. Bajo pulsante analógico (sawtooth filtrado)
     const bassMidi = theme.bassSequence[step % theme.bassSequence.length];
     if (bassMidi > 0) {
       const freq = midiToFrequency(bassMidi);
@@ -176,21 +175,17 @@ export class SoundEffectsController {
       );
     }
 
-    // 2. Arpegio espacial retro (onda cuadrada/triangular con eco corto)
     const arpMidi = theme.arpSequence[step % theme.arpSequence.length];
     if (arpMidi > 0) {
       const arpFreq = midiToFrequency(arpMidi);
       this.scheduleArpNote(arpFreq, time, stepDuration * 0.72, 0.024);
-      // Eco espacial un paso más tarde con menor volumen
       this.scheduleArpNote(arpFreq, time + stepDuration * 1.5, stepDuration * 0.5, 0.009);
     }
 
-    // 3. Bombo electrónico en tiempos fuertes (pasos 0, 4, 8, 12)
     if (step % 4 === 0) {
       this.scheduleKick(time, 0.065);
     }
 
-    // 4. Hi-hat electrónico en contratiempos (pasos 2, 6, 10, 14) y redoble sutil en 15
     if (step % 4 === 2 || step === 15) {
       this.scheduleHiHat(time, step === 15 ? 0.014 : 0.022);
     }
@@ -327,6 +322,22 @@ export class SoundEffectsController {
           break;
         case 'SECTOR_ADVANCED':
           this.playChord([587.33, 783.99, 932.33, 1174.66], 0.24, 0.11);
+          break;
+        case 'BOOST_GATE_PASSED':
+          this.playChord([523.25, 659.25, 1046.5], 0.14, 0.1);
+          break;
+        case 'POWERUP_COLLECTED':
+        case 'SHIP_UPGRADED':
+          this.playChord([440, 554.37, 659.25, 880], 0.18, 0.1);
+          break;
+        case 'SHIELD_ABSORBED_HIT':
+          this.playTone(680, 240, 0.15, 'triangle', 0.11);
+          break;
+        case 'WORMHOLE_TRAVERSED':
+          this.playTone(320, 960, 0.2, 'sine', 0.1);
+          break;
+        case 'ORBIT_INVERTED':
+          this.playTone(480, 360, 0.06, 'triangle', 0.07);
           break;
         case 'SHIP_ASTEROID_HIT':
         case 'SHIP_OUT_OF_BOUNDS':

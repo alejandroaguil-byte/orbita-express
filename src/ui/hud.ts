@@ -1,6 +1,6 @@
 import { GAME_CONFIG } from '../config/gameConfig';
 import { InputCommandHandler } from '../input/inputController';
-import { AppState, GameSnapshot, ShipMode } from '../types/game';
+import { AppState, GameSnapshot, ShipMode, ShipState, ShipTier } from '../types/game';
 
 export interface HudCallbacks {
   readonly onCommand: InputCommandHandler;
@@ -16,10 +16,12 @@ export class HudOverlay {
   private readonly deliveriesEl: HTMLElement;
   private readonly scoreEl: HTMLElement;
   private readonly comboEl: HTMLElement;
+  private readonly shipPowersEl: HTMLElement;
   private readonly targetNameEl: HTMLElement;
   private readonly shipStatusEl: HTMLElement;
   private readonly helpBannerEl: HTMLElement;
 
+  private readonly flipOrbitButtonEl: HTMLButtonElement;
   private readonly muteButtonEl: HTMLButtonElement;
   private readonly pauseButtonEl: HTMLButtonElement;
   private readonly restartButtonEl: HTMLButtonElement;
@@ -29,7 +31,7 @@ export class HudOverlay {
   private readonly startButtonEl: HTMLButtonElement;
 
   private readonly pauseModalEl: HTMLElement;
-  private readonly resumeButtonEl: HTMLButtonElement;
+  private readonly resumeButtonEl: HTMLElement;
   private readonly modalRestartButtonEl: HTMLButtonElement;
 
   private readonly resultModalEl: HTMLElement;
@@ -55,10 +57,12 @@ export class HudOverlay {
     this.deliveriesEl = this.requireElement(root, '#hud-deliveries');
     this.scoreEl = this.requireElement(root, '#hud-score');
     this.comboEl = this.requireElement(root, '#hud-combo');
+    this.shipPowersEl = this.requireElement(root, '#hud-ship-powers');
     this.targetNameEl = this.requireElement(root, '#hud-target-name');
     this.shipStatusEl = this.requireElement(root, '#hud-ship-status');
     this.helpBannerEl = this.requireElement(root, '#hud-help-banner');
 
+    this.flipOrbitButtonEl = this.requireElement(root, '#btn-flip-orbit') as HTMLButtonElement;
     this.muteButtonEl = this.requireElement(root, '#btn-mute') as HTMLButtonElement;
     this.pauseButtonEl = this.requireElement(root, '#btn-pause') as HTMLButtonElement;
     this.restartButtonEl = this.requireElement(root, '#btn-restart') as HTMLButtonElement;
@@ -110,6 +114,11 @@ export class HudOverlay {
   }
 
   private bindButtons(): void {
+    this.flipOrbitButtonEl.addEventListener('click', () => {
+      this.callbacks.onCommand({ type: 'FLIP_ORBIT' });
+      this.focusGameSurface();
+    });
+
     this.muteButtonEl.addEventListener('click', () => {
       const nextMuted = this.callbacks.onToggleMute();
       this.syncMuteButton(nextMuted);
@@ -161,6 +170,27 @@ export class HudOverlay {
     return 'Recuperando ruta';
   }
 
+  private formatTierRoman(tier: ShipTier): string {
+    if (tier === 3) return 'MK-III';
+    if (tier === 2) return 'MK-II';
+    return 'MK-I';
+  }
+
+  private formatShipPowers(ship: ShipState): string {
+    const badges: string[] = [];
+    if (ship.powers.phaseShield) {
+      badges.push('ESCUDO');
+    }
+    if (ship.powers.chronoAimTimer > 0) {
+      badges.push(`CRONO ${Math.ceil(ship.powers.chronoAimTimer)}s`);
+    }
+    if (ship.powers.magnetarTimer > 0) {
+      badges.push(`MAG ${Math.ceil(ship.powers.magnetarTimer)}s`);
+    }
+    const powerSuffix = badges.length > 0 ? badges.join('+') : 'Base';
+    return `${this.formatTierRoman(ship.tier)} · ${powerSuffix}`;
+  }
+
   public update(snapshot: GameSnapshot): void {
     const targetPlanet = snapshot.stage.planets.find((p) => p.id === snapshot.targetPlanetId);
 
@@ -177,6 +207,8 @@ export class HudOverlay {
     this.comboEl.textContent = `x${displayCombo}`;
     this.comboEl.classList.toggle('hud-value--combo-active', snapshot.combo >= 2);
 
+    this.shipPowersEl.textContent = this.formatShipPowers(snapshot.ship);
+
     this.targetNameEl.textContent = targetPlanet ? targetPlanet.name : snapshot.targetPlanetId;
     this.shipStatusEl.textContent = this.formatShipMode(
       snapshot.ship.mode,
@@ -191,6 +223,8 @@ export class HudOverlay {
     this.pauseButtonEl.setAttribute('aria-pressed', String(isPaused));
     this.pauseButtonEl.disabled =
       snapshot.appState !== 'PLAYING' && snapshot.appState !== 'PAUSED';
+    this.flipOrbitButtonEl.disabled =
+      snapshot.appState !== 'PLAYING' || snapshot.ship.mode !== 'ORBITING';
 
     this.startHighScoreEl.textContent = `${snapshot.highScore}`;
 
@@ -205,7 +239,7 @@ export class HudOverlay {
         ? '¡Reparto exitoso!'
         : 'Se acabó el tiempo';
       this.resultSubtitleEl.textContent = won
-        ? `Superaste los ${snapshot.totalSectors} sectores con ${snapshot.remainingTime.toFixed(1)}s de margen.`
+        ? `Superaste los ${snapshot.totalSectors} sectores con nave ${this.formatTierRoman(snapshot.ship.tier)} y ${snapshot.remainingTime.toFixed(1)}s de margen.`
         : `Alcanzaste el Sector ${snapshot.currentSectorNumber}/${snapshot.totalSectors} (${snapshot.deliveriesCompleted}/${snapshot.totalDeliveriesGoal} entregas).`;
       this.resultDeliveriesEl.textContent = `${snapshot.deliveriesCompleted} / ${snapshot.totalDeliveriesGoal}`;
       this.resultScoreEl.textContent = `${snapshot.score}`;

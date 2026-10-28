@@ -29,12 +29,24 @@
             <span class="hud-label">Combo</span>
             <span class="hud-value hud-value--combo" id="hud-combo">x1</span>
           </div>
+          <div class="hud-metric hud-metric--ship">
+            <span class="hud-label">Nave / Poderes</span>
+            <span class="hud-value hud-value--powers" id="hud-ship-powers">MK-I · Base</span>
+          </div>
           <div class="hud-metric hud-metric--status">
             <span class="hud-label">Estado</span>
             <span class="hud-value" id="hud-ship-status" data-mode="orbiting">Orbitando</span>
           </div>
         </div>
         <div class="hud-actions">
+          <button
+            type="button"
+            class="hud-btn"
+            id="btn-flip-orbit"
+            title="Invertir sentido de giro orbital (Tecla R)"
+          >
+            Giro (R)
+          </button>
           <button
             type="button"
             class="hud-btn hud-btn--icon"
@@ -69,7 +81,7 @@
         <p class="hud-keyboard-hint">
           <span id="hud-sector-name">Corredor Orbital Alfa</span> · Destino:
           <strong id="hud-target-name">Faro Ámbar</strong> · <strong>Espacio</strong> saltar ·
-          <strong>P</strong> pausar
+          <strong>R</strong> giro · <strong>P</strong> pausar
         </p>
       </footer>
 
@@ -86,8 +98,8 @@
           <span class="modal-eyebrow">Servicio Postal Interplanetario</span>
           <h1 class="modal-title" id="start-title">Órbita Express</h1>
           <p class="modal-text">
-            Superá <strong>3 sectores</strong> de dificultad creciente saltando entre planetas antes
-            de que termine la cuenta regresiva.
+            Superá <strong>3 sectores</strong> con mecánicas únicas, recolectá cápsulas biomecánicas
+            y evolucioná tu nave de <strong>MK-I a MK-III</strong> antes de que termine el reloj.
           </p>
           <p class="modal-instruction">
             Mantené presionado para ver la dirección. Soltá para saltar.
