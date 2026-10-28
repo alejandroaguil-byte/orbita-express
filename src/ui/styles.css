@@ -73,6 +73,42 @@ body {
   box-shadow: 0 4px 0 rgba(244, 63, 94, 0.25);
 }
 
+.armory-bar {
+  position: relative;
+  z-index: 12;
+  width: min(100%, 540px);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(25, 12, 46, 0.94);
+  border-bottom: 2px solid var(--accent-gold);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.8);
+}
+
+.armory-bar[hidden] {
+  display: none !important;
+}
+
+.armory-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+  text-transform: uppercase;
+}
+
+.armory-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.hud-btn--armory {
+  border-color: var(--accent-gold);
+  background: #2e1065;
+  color: #fef08a;
+}
+
 .hud-metrics {
   display: flex;
   align-items: center;
@@ -336,6 +372,7 @@ body {
   .hud-top-bar {
     padding: 5px 6px;
     gap: 4px;
+    flex-wrap: wrap;
   }
 
   .hud-metrics {
@@ -352,7 +389,13 @@ body {
 
   .hud-btn {
     padding: 4px 5px;
-    font-size: 0.62rem;
+    font-size: 0.6rem;
+  }
+
+  .armory-bar {
+    flex-direction: column;
+    padding: 5px 6px;
+    gap: 4px;
   }
 
   .hud-help-banner {

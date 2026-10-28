@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Órbita Express - Verificación Integral de Navegador y Progresión de Sectores', () => {
-  test('flujo completo: inicio, sector 1/3, poderes de nave, inversión de órbita, controles táctiles/teclado, cancelar gesto, pausa, fin de partida y 360px', async ({
+  test('flujo completo: inicio, sector 1/3, poderes de nave, inversión de órbita, dash en vuelo, controles táctiles/teclado, cancelar gesto, pausa, fin de partida y 360px', async ({
     page,
   }) => {
     const consoleErrors: string[] = [];
@@ -73,7 +73,7 @@ test.describe('Órbita Express - Verificación Integral de Navegador y Progresi�
     );
     expect(jumpsAfterCancel).toBe(0);
 
-    // 3. Mantener y soltar puntero -> debe lanzar la nave
+    // 3. Mantener y soltar puntero -> debe lanzar la nave y habilitar Dash en vuelo
     await canvas.dispatchEvent('pointerdown', {
       pointerId: 2,
       pointerType: 'touch',
@@ -93,6 +93,13 @@ test.describe('Órbita Express - Verificación Integral de Navegador y Progresi�
       () => window.__ORBITA_DEBUG__?.getSnapshot().jumpCount,
     );
     expect(jumpsAfterLaunch).toBe(1);
+
+    // Activar Dash en vuelo con botón #btn-flight-dash
+    await page.locator('#btn-flight-dash').click();
+    const dashAvailableAfterClick = await page.evaluate(
+      () => window.__ORBITA_DEBUG__?.getSnapshot().ship.dashAvailableThisFlight,
+    );
+    expect(dashAvailableAfterClick).toBe(false);
 
     // 4. Pausar y continuar (con botón y con teclado en el modal)
     await page.locator('#btn-pause').click();

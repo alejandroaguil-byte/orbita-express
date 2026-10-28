@@ -7,10 +7,6 @@ import {
 
 /**
  * Sintetizador de efectos y música electrónica espacial estilo Axiom Verge (Web Audio API).
- * - Cero recursos externos (licencia 100 % propia).
- * - Secuenciador por pasos (bajo analógico, arpegio cristalino y pulso electrónico) que
- *   adapta su BPM y escala armónica según el sector actual (1, 2 o 3).
- * - Solo inicializa o reanuda el AudioContext tras interacción explícita del usuario.
  */
 export class SoundEffectsController {
   private ctx: AudioContext | null = null;
@@ -48,9 +44,6 @@ export class SoundEffectsController {
     return this.muted;
   }
 
-  /**
-   * Sincroniza el estado de la banda sonora electrónica según el estado del juego y el sector.
-   */
   public syncMusicState(appState: AppState, sectorNumber: number): void {
     this.currentAppState = appState;
     this.currentSector = sectorNumber;
@@ -65,9 +58,6 @@ export class SoundEffectsController {
     }
   }
 
-  /**
-   * Debe llamarse dentro de un gesto del usuario (pointerdown, keydown, click).
-   */
   public unlockAudioContext(): void {
     if (this.muted || typeof window === 'undefined') {
       return;
@@ -314,13 +304,20 @@ export class SoundEffectsController {
         case 'SHIP_LAUNCHED':
           this.playTone(260, 580, 0.09, 'square', 0.09);
           break;
+        case 'SHIP_DASHED':
+          this.playTone(440, 880, 0.08, 'sawtooth', 0.085);
+          break;
         case 'PLANET_CAPTURED':
           this.playTone(390, 520, 0.06, 'triangle', 0.08);
+          break;
+        case 'PERFECT_CAPTURE':
+          this.playChord([659.25, 880, 1318.51], 0.14, 0.095);
           break;
         case 'DELIVERY_COMPLETED':
           this.playChord([587.33, 739.99, 880], 0.16, 0.1);
           break;
         case 'SECTOR_ADVANCED':
+        case 'SECTOR_UPGRADE_APPLIED':
           this.playChord([587.33, 783.99, 932.33, 1174.66], 0.24, 0.11);
           break;
         case 'BOOST_GATE_PASSED':

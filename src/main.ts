@@ -45,6 +45,7 @@ function bootstrapGame(): void {
   ): void => {
     sound.syncMusicState(snapshot.appState, snapshot.currentSectorNumber);
     sound.handleSimulationEvents(events);
+    renderer.handleSimulationEvents(events);
 
     if (snapshot.highScore > lastSavedHighScore) {
       lastSavedHighScore = snapshot.highScore;
